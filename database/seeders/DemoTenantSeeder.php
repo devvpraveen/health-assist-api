@@ -310,9 +310,10 @@ class DemoTenantSeeder extends Seeder
             'name' => 'Demo Admin',
             'tenant_id' => $tenant->id,
         ]);
-        $assign->handle(
+        $this->assignExclusiveDemoRole(
+            $assign,
             $admin,
-            Role::query()->where('slug', 'organization_admin')->whereNull('tenant_id')->firstOrFail(),
+            'organization_admin',
             $tenant->id,
             $branch->id,
             $admin,
@@ -324,9 +325,10 @@ class DemoTenantSeeder extends Seeder
             'name' => 'Demo Branch Manager',
             'tenant_id' => $tenant->id,
         ]);
-        $assign->handle(
+        $this->assignExclusiveDemoRole(
+            $assign,
             $manager,
-            Role::query()->where('slug', 'branch_manager')->whereNull('tenant_id')->firstOrFail(),
+            'branch_manager',
             $tenant->id,
             $branch->id,
             $admin,
@@ -339,9 +341,10 @@ class DemoTenantSeeder extends Seeder
             'tenant_id' => $tenant->id,
             'phone' => '+15550002222',
         ]);
-        $assign->handle(
+        $this->assignExclusiveDemoRole(
+            $assign,
             $providerUser,
-            Role::query()->where('slug', 'branch_manager')->whereNull('tenant_id')->firstOrFail(),
+            'provider',
             $tenant->id,
             $branch->id,
             $admin,
@@ -381,9 +384,10 @@ class DemoTenantSeeder extends Seeder
             'tenant_id' => $tenant->id,
             'phone' => '+15550003333',
         ]);
-        $assign->handle(
+        $this->assignExclusiveDemoRole(
+            $assign,
             $provider2User,
-            Role::query()->where('slug', 'branch_manager')->whereNull('tenant_id')->firstOrFail(),
+            'provider',
             $tenant->id,
             $branch->id,
             $admin,
@@ -446,6 +450,14 @@ class DemoTenantSeeder extends Seeder
             'tenant_id' => $tenant->id,
             'phone' => '+15550004444',
         ]);
+        $this->assignExclusiveDemoRole(
+            $assign,
+            $patientUser,
+            'patient',
+            $tenant->id,
+            null,
+            $admin,
+        );
         $this->setMobilePreference($patientUser, 'patient');
 
         $patient = Patient::query()->updateOrCreate(
@@ -474,6 +486,14 @@ class DemoTenantSeeder extends Seeder
             'tenant_id' => $tenant->id,
             'phone' => '+15550005555',
         ]);
+        $this->assignExclusiveDemoRole(
+            $assign,
+            $patient2User,
+            'patient',
+            $tenant->id,
+            null,
+            $admin,
+        );
         $this->setMobilePreference($patient2User, 'patient');
 
         $patient2 = Patient::query()->updateOrCreate(
@@ -717,6 +737,36 @@ class DemoTenantSeeder extends Seeder
                 'email_verified_at' => now(),
             ],
         );
+    }
+
+    /**
+     * Demo accounts get exactly one persona role so re-seeds correct bad data
+     * (e.g. providers that were previously attached as branch_manager).
+     */
+    private function assignExclusiveDemoRole(
+        AssignRoleAction $assign,
+        User $user,
+        string $slug,
+        int $tenantId,
+        ?int $branchId,
+        User $actor,
+    ): void {
+        $personaSlugs = [
+            'patient',
+            'provider',
+            'clinic_admin',
+            'organization_admin',
+            'branch_manager',
+            'super_admin',
+        ];
+        $roleIds = Role::query()
+            ->whereNull('tenant_id')
+            ->whereIn('slug', $personaSlugs)
+            ->pluck('id');
+        $user->roles()->detach($roleIds);
+
+        $role = Role::query()->where('slug', $slug)->whereNull('tenant_id')->firstOrFail();
+        $assign->handle($user, $role, $tenantId, $branchId, $actor);
     }
 
     private function setMobilePreference(User $user, string $accountType, ?string $professionalType = null): void
