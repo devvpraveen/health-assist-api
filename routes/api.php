@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\Admin\LanguageController as AdminLanguageControl
 use App\Http\Controllers\Api\V1\Admin\PlatformIntegrationController as AdminPlatformIntegrationController;
 use App\Http\Controllers\Api\V1\Admin\PlatformRoleController as AdminPlatformRoleController;
 use App\Http\Controllers\Api\V1\Admin\PlatformSettingController as AdminPlatformSettingController;
+use App\Http\Controllers\Api\V1\Admin\PlatformThemeController as AdminPlatformThemeController;
 use App\Http\Controllers\Api\V1\Admin\PlatformUserController as AdminPlatformUserController;
 use App\Http\Controllers\Api\V1\Admin\SecurityConsoleController as AdminSecurityConsoleController;
 use App\Http\Controllers\Api\V1\Admin\UiTranslationController as AdminUiTranslationController;
@@ -88,6 +89,7 @@ use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TenantLanguageSettingsController;
 use App\Http\Controllers\Api\V1\TenantSetupController;
 use App\Http\Controllers\Api\V1\TenantStaffController;
+use App\Http\Controllers\Api\V1\ThemeController;
 use App\Http\Controllers\Api\V1\UiTranslationController;
 use App\Http\Controllers\Api\V1\WaitlistController;
 use App\Http\Controllers\Api\V1\WellnessCategoryController;
@@ -117,6 +119,7 @@ Route::prefix('v1')->group(function (): void {
 
     Route::get('languages', [LanguageController::class, 'index'])->middleware('throttle:60,1');
     Route::get('translations', [UiTranslationController::class, 'index'])->middleware('throttle:60,1');
+    Route::get('theme', [ThemeController::class, 'show'])->middleware('throttle:60,1');
 
     // Evolution API inbound webhook (no Sanctum; verified via account webhook_secret).
     Route::post('webhooks/evolution/{accountUuid}', EvolutionWebhookController::class)
@@ -277,6 +280,10 @@ Route::prefix('v1')->group(function (): void {
             Route::post('settings', [AdminPlatformSettingController::class, 'store']);
             Route::patch('settings/{setting}', [AdminPlatformSettingController::class, 'update']);
             Route::delete('settings/{setting}', [AdminPlatformSettingController::class, 'destroy']);
+
+            Route::get('theme', [AdminPlatformThemeController::class, 'show']);
+            Route::put('theme/draft', [AdminPlatformThemeController::class, 'updateDraft']);
+            Route::post('theme/publish', [AdminPlatformThemeController::class, 'publish']);
 
             Route::get('integrations', [AdminPlatformIntegrationController::class, 'index']);
             Route::post('integrations', [AdminPlatformIntegrationController::class, 'store']);

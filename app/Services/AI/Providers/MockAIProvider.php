@@ -18,8 +18,10 @@ class MockAIProvider implements AIProviderInterface
             || str_starts_with((string) $request->feature, 'report.')) {
             $content = $this->reportPayload($request, $userText);
         } else {
-            // Conversational agents should return patient-facing plain text (not raw JSON).
-            $content = 'Mock assistive response for: '.mb_substr($userText, 0, 120);
+            $patientText = $this->patientFacingUserText($userText);
+            $quoted = mb_substr($patientText, 0, 160);
+            $content = 'Based on the information you shared, I can help you think through a calm next step. This is not a diagnosis.'
+                ."\n\nYou said: \"{$quoted}\"\n\nIf this may be an emergency, contact local emergency services. Otherwise, a healthcare professional should interpret this in the context of your health.";
         }
 
         $inputTokens = max(1, (int) ceil(strlen($userText) / 4));
@@ -132,6 +134,18 @@ class MockAIProvider implements AIProviderInterface
         }
 
         return $request->system ?? '';
+    }
+
+    private function patientFacingUserText(string $raw): string
+    {
+        if (preg_match('/User message \(assist only[^)]*\):\s*(.+)/s', $raw, $matches) === 1) {
+            $line = trim((string) explode("\n", (string) $matches[1])[0]);
+            if ($line !== '') {
+                return $line;
+            }
+        }
+
+        return mb_substr($raw, 0, 160);
     }
 
     private function reportPayload(PromptRequest $request, string $userText): string

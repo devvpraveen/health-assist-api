@@ -39,7 +39,7 @@ return [
         'max_user_turns' => (int) env('HEALTH_GUIDE_GUEST_MAX_TURNS', 3),
         'ttl_hours' => (int) env('HEALTH_GUIDE_GUEST_TTL_HOURS', 24),
         'default_tenant_slug' => env('HEALTH_GUIDE_GUEST_TENANT_SLUG', 'healthassist-demo'),
-        'opening_message' => 'Tell me what you\'re experiencing. I can help you understand what might be going on and find the right next step — assistive only, not a diagnosis.',
+        'opening_message' => 'Have a health question? Ask Health Assist in plain language. This is assistance only — not a diagnosis or emergency care.',
         'continue_message' => 'Thanks. I have a better understanding of what you\'re experiencing. I can help with next steps, including finding an appropriate healthcare professional. Create your free Health Assist account to continue and save this conversation.',
         'auth_required_message' => 'Please continue with Health Assist to save this conversation and keep going.',
     ],

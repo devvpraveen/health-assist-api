@@ -6,6 +6,7 @@ use App\Models\AiAuditLog;
 use App\Models\AiUsageRecord;
 use App\Services\AI\AIOrchestrator;
 use App\Services\AI\DTO\AgentContext;
+use App\Services\AI\DTO\PromptRequest;
 use App\Services\AI\Providers\MockAIProvider;
 use App\Support\TenantContext;
 use Database\Seeders\AiCoreSeeder;
@@ -31,7 +32,7 @@ class MockAIProviderTest extends TestCase
     public function test_mock_provider_returns_deterministic_content(): void
     {
         $provider = app(MockAIProvider::class);
-        $result = $provider->generate(new \App\Services\AI\DTO\PromptRequest(
+        $result = $provider->generate(new PromptRequest(
             tenantId: 1,
             agent: 'patient',
             feature: 'patient.assist',
@@ -41,7 +42,9 @@ class MockAIProviderTest extends TestCase
             modelHint: 'mock-chat',
         ));
 
-        $this->assertStringContainsString('Mock assistive response', $result->content);
+        $this->assertStringContainsString('Based on the information you shared', $result->content);
+        $this->assertStringContainsString('Hello', $result->content);
+        $this->assertStringNotContainsString('Structured state summary', $result->content);
         $this->assertSame('mock-chat', $result->model);
         $this->assertGreaterThan(0, $result->inputTokens);
         $this->assertGreaterThan(0, $result->outputTokens);
