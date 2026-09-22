@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Provider;
 use App\Models\StaffInvite;
+use App\Support\RoleCatalog;
 use App\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,11 +25,7 @@ class StaffInviteController extends Controller
                 'providers' => $providers,
             ],
             'meta' => [
-                'role_templates' => [
-                    ['slug' => 'clinic_admin', 'label' => 'Admin'],
-                    ['slug' => 'provider', 'label' => 'Doctor / Therapist'],
-                    ['slug' => 'patient', 'label' => 'Patient (linked)'],
-                ],
+                'role_templates' => RoleCatalog::tenantRoleTemplatesMeta(),
             ],
         ]);
     }
@@ -38,7 +35,12 @@ class StaffInviteController extends Controller
         $data = $request->validate([
             'email' => ['required', 'email', 'max:255'],
             'name' => ['nullable', 'string', 'max:120'],
-            'role_slug' => ['nullable', Rule::in(['clinic_admin', 'provider', 'organization_admin'])],
+            'role_slug' => ['nullable', Rule::in([
+                'clinic_admin',
+                'provider',
+                'organization_admin',
+                'branch_manager',
+            ])],
             'designation' => ['nullable', 'string', 'max:120'],
         ]);
 

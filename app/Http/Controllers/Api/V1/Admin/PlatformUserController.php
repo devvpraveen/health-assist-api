@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Support\RoleCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -77,8 +78,19 @@ class PlatformUserController extends Controller
             ->firstOrFail();
 
         $isPlatformOperator = $request->boolean('platform')
-            || $role->slug === 'super_admin'
-            || str_starts_with($role->slug, 'platform_');
+            || RoleCatalog::isPlatformAdminSlug($role->slug);
+
+        if ($isPlatformOperator && ! RoleCatalog::isPlatformAdminRole($role)) {
+            throw ValidationException::withMessages([
+                'role_slug' => ['Platform admin users require a super_admin or platform_* role.'],
+            ]);
+        }
+
+        if (! $isPlatformOperator && ! RoleCatalog::isTenantTemplateRole($role)) {
+            throw ValidationException::withMessages([
+                'role_slug' => ['Public/tenant users must use a clinic template role (or be created by the clinic under Staff).'],
+            ]);
+        }
 
         $tenant = null;
         if (! empty($validated['tenant_uuid'])) {
@@ -93,7 +105,7 @@ class PlatformUserController extends Controller
 
         if (! $isPlatformOperator && $tenant === null) {
             throw ValidationException::withMessages([
-                'tenant_uuid' => ['Select a tenant for this role.'],
+                'tenant_uuid' => ['Select a tenant for this role. Prefer creating staff from the clinic Staff screen.'],
             ]);
         }
 
@@ -163,8 +175,19 @@ class PlatformUserController extends Controller
         if ($roleSlug) {
             $role = Role::query()->whereNull('tenant_id')->where('slug', $roleSlug)->firstOrFail();
             $isPlatformOperator = $user->tenant_id === null
-                || $role->slug === 'super_admin'
-                || str_starts_with($role->slug, 'platform_');
+                || RoleCatalog::isPlatformAdminSlug($role->slug);
+
+            if ($isPlatformOperator && ! RoleCatalog::isPlatformAdminRole($role)) {
+                throw ValidationException::withMessages([
+                    'role_slug' => ['Platform admin users require a super_admin or platform_* role.'],
+                ]);
+            }
+
+            if (! $isPlatformOperator && ! RoleCatalog::isTenantTemplateRole($role)) {
+                throw ValidationException::withMessages([
+                    'role_slug' => ['Tenant users must use a clinic template role.'],
+                ]);
+            }
 
             if ($isPlatformOperator) {
                 $user->tenant_id = null;

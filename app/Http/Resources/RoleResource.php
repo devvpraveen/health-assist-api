@@ -23,7 +23,22 @@ class RoleResource extends JsonResource
             'slug' => $this->slug,
             'tenant_id' => $this->tenant_id,
             'is_system' => $this->tenant_id === null,
+            'is_platform_admin' => $this->tenant_id === null
+                && ($this->slug === 'super_admin' || str_starts_with((string) $this->slug, 'platform_')),
+            'is_tenant_template' => $this->tenant_id === null
+                && in_array($this->slug, [
+                    'organization_admin',
+                    'branch_manager',
+                    'clinic_admin',
+                    'provider',
+                    'patient',
+                ], true),
             'is_locked' => $this->slug === 'super_admin',
+            'scope' => $this->tenant_id !== null
+                ? 'tenant'
+                : (($this->slug === 'super_admin' || str_starts_with((string) $this->slug, 'platform_'))
+                    ? 'platform'
+                    : 'template'),
             'permission_slugs' => $this->whenLoaded(
                 'permissions',
                 fn () => $this->permissions->pluck('slug')->values()->all(),
