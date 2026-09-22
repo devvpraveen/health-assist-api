@@ -5,7 +5,8 @@ Laravel backend for **Health Assist**: multi-tenant healthcare platform APIs (pa
 - **Repo:** [devvpraveen/health-assist-api](https://github.com/devvpraveen/health-assist-api)
 - **Monorepo path:** `apps/api` in [health-assist](https://github.com/devvpraveen/health-assist)
 - **API base:** `/api/v1`
-- **Stack:** Laravel 13, PHP 8.3+, Sanctum, Fortify, SQLite (local) / MySQL (prod)
+- **Stack:** Laravel 13, PHP **8.3+** (Hostinger: set PHP 8.3 or 8.4 in hPanel), Sanctum, Fortify, SQLite (local) / MySQL (prod)
+- **Note:** `composer.lock` targets Symfony 7.4 so `composer install` works on PHP 8.3. A lock built on PHP 8.4 alone can pull Symfony 8.1 and fail Hostinger with “lock file does not contain a compatible set of packages.”
 
 AI assists clinicians and patients; it does **not** prescribe or auto-approve clinical content.
 
