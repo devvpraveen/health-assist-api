@@ -39,6 +39,30 @@ composer run dev
 - App / Inertia staff UI: [http://localhost:8000](http://localhost:8000)
 - JSON API: [http://localhost:8000/api/v1](http://localhost:8000/api/v1)
 
+## Frontend assets (Vite)
+
+Inertia UI needs `public/build/manifest.json`. Locally:
+
+```bash
+npm install
+npm run build
+```
+
+`public/build` is committed so Hostinger git deploys work without a Node build step. After changing `resources/js` or CSS, rebuild and push again.
+
+### Hostinger (SSH fallback)
+
+If the Vite error appears on the server:
+
+```bash
+cd ~/domains/YOUR_DOMAIN/public_html   # or your app root
+npm install
+npm run build
+php artisan optimize:clear
+```
+
+Document root must be the Laravel `public/` folder (not the project root).
+
 ## Demo accounts
 
 After `migrate --seed` (password for all: `password`):
