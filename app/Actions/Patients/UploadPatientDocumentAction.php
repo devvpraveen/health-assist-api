@@ -3,6 +3,7 @@
 namespace App\Actions\Patients;
 
 use App\Contracts\RecordIntegrityVerifierInterface;
+use App\Models\HealthRecord;
 use App\Models\Patient;
 use App\Models\PatientDocument;
 use App\Models\User;
@@ -22,6 +23,7 @@ class UploadPatientDocumentAction
         private PatientTimelineRecorder $timelineRecorder,
         private IntegrityHasher $integrityHasher,
         private RecordIntegrityVerifierInterface $integrityVerifier,
+        private CreateHealthRecordAction $createHealthRecordAction,
     ) {}
 
     /**
@@ -31,6 +33,20 @@ class UploadPatientDocumentAction
     {
         return DB::transaction(function () use ($patient, $file, $data, $uploader): PatientDocument {
             $tenantId = TenantContext::id() ?? $patient->tenant_id;
+
+            if (empty($data['health_record_id'])) {
+                $category = $this->mapCategory(isset($data['category']) ? (string) $data['category'] : null);
+                $record = $this->createHealthRecordAction->handle($patient, [
+                    'category' => $category,
+                    'title' => $file->getClientOriginalName() ?: 'Uploaded document',
+                    'description' => 'Uploaded from Health Assist',
+                    'recorded_at' => now()->toIso8601String(),
+                    'status' => 'active',
+                ]);
+                $data['health_record_id'] = $record->id;
+                $data['category'] = $data['category'] ?? $category;
+            }
+
             $documentUuid = (string) Str::uuid();
             $extension = $file->getClientOriginalExtension() ?: $file->extension() ?: 'bin';
             $relativePath = sprintf(
@@ -95,6 +111,7 @@ class UploadPatientDocumentAction
                     'document_uuid' => $document->uuid,
                     'mime_type' => $document->mime_type,
                     'size' => $document->size,
+                    'health_record_id' => $document->health_record_id,
                 ],
             );
 
@@ -107,5 +124,29 @@ class UploadPatientDocumentAction
 
             return $document->refresh();
         });
+    }
+
+    private function mapCategory(?string $category): string
+    {
+        $normalized = strtolower(trim((string) $category));
+        $aliases = [
+            'lab' => 'laboratory',
+            'labs' => 'laboratory',
+            'laboratory' => 'laboratory',
+            'imaging' => 'imaging',
+            'xray' => 'imaging',
+            'scan' => 'imaging',
+            'prescription' => 'prescription',
+            'visit' => 'consultation_note',
+            'consultation' => 'consultation_note',
+            'consultation_note' => 'consultation_note',
+        ];
+
+        $mapped = $aliases[$normalized] ?? $normalized;
+        if (in_array($mapped, HealthRecord::CATEGORIES, true)) {
+            return $mapped;
+        }
+
+        return 'other';
     }
 }

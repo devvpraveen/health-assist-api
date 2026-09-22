@@ -127,6 +127,13 @@ class ModulePlatformTest extends TestCase
             ->assertJsonStructure(['data' => [['key', 'name']]]);
     }
 
+    public function test_public_modules_catalog_is_available_without_auth(): void
+    {
+        $this->getJson('/api/v1/public/modules')
+            ->assertOk()
+            ->assertJsonStructure(['data']);
+    }
+
     public function test_self_serve_subscription_assign_upgrades_package(): void
     {
         [$user, , $tenant] = $this->createTenantUserWithOrg('Upgrade Clinic');
@@ -263,5 +270,109 @@ class ModulePlatformTest extends TestCase
         $this->getJson('/api/v1/report-analyses')->assertForbidden();
         $this->getJson('/api/v1/ai/agents')->assertForbidden();
         $this->getJson('/api/v1/health-guide/conversations')->assertForbidden();
+    }
+
+    public function test_super_admin_can_create_and_assign_saas_package(): void
+    {
+        $admin = $this->createSuperAdminUser();
+        [, , $tenant] = $this->createTenantUserWithOrg('Assign Target Clinic');
+        Sanctum::actingAs($admin);
+
+        $this->postJson('/api/v1/packages', [
+            'key' => 'clinic_plus',
+            'name' => 'Clinic Plus',
+            'description' => 'Custom plan',
+            'clone_from' => 'starter',
+            'price_monthly' => 7999,
+            'price_cents' => 799900,
+            'validity_days' => 30,
+            'limits' => ['staff' => 12],
+        ])->assertCreated()
+            ->assertJsonPath('data.key', 'clinic_plus')
+            ->assertJsonPath('data.name', 'Clinic Plus')
+            ->assertJsonPath('data.price_cents', 799900)
+            ->assertJsonPath('data.validity_days', 30);
+
+        $this->assertDatabaseHas('packages', [
+            'key' => 'clinic_plus',
+            'name' => 'Clinic Plus',
+            'price_cents' => 799900,
+            'validity_days' => 30,
+        ]);
+
+        $this->postJson('/api/v1/tenants/current/subscription', [
+            'package_key' => 'clinic_plus',
+        ], [
+            'X-Tenant-UUID' => $tenant->uuid,
+        ])->assertOk()
+            ->assertJsonPath('data.subscription.package.key', 'clinic_plus');
+
+        $this->assertDatabaseHas('tenant_subscriptions', [
+            'tenant_id' => $tenant->id,
+            'status' => 'active',
+        ]);
+    }
+
+    public function test_tenant_can_purchase_modules_with_amount_and_validity(): void
+    {
+        [$user, , $tenant] = $this->createTenantUserWithOrg('Addon Buy Clinic');
+        $starter = Package::query()->where('key', 'starter')->firstOrFail();
+        app(AssignPackageToTenantAction::class)->handle($tenant, $starter, true);
+
+        $billing = \App\Models\PlatformModule::query()->where('key', 'billing')->firstOrFail();
+        $billing->update([
+            'price_cents' => 99900,
+            'currency' => 'INR',
+            'validity_days' => 30,
+            'is_purchasable' => true,
+        ]);
+
+        Sanctum::actingAs($user);
+        TenantContext::set($tenant->id);
+
+        $this->postJson('/api/v1/tenants/current/modules/purchase', [
+            'module_keys' => ['billing'],
+        ])->assertOk()
+            ->assertJsonPath('data.total_cents', 99900)
+            ->assertJsonPath('data.currency', 'INR')
+            ->assertJsonPath('data.line_items.0.key', 'billing')
+            ->assertJsonPath('data.line_items.0.validity_days', 30);
+
+        $this->assertDatabaseHas('tenant_modules', [
+            'tenant_id' => $tenant->id,
+            'module_id' => $billing->id,
+            'status' => 'active',
+            'source' => 'addon',
+            'paid_cents' => 99900,
+        ]);
+
+        $row = TenantModule::query()->withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->where('module_id', $billing->id)
+            ->first();
+        $this->assertNotNull($row?->expires_at);
+        $this->assertTrue($row->expires_at->isFuture());
+    }
+
+    public function test_super_admin_can_update_module_pricing(): void
+    {
+        $admin = $this->createSuperAdminUser();
+        Sanctum::actingAs($admin);
+
+        $this->patchJson('/api/v1/modules/whatsapp', [
+            'price_cents' => 150000,
+            'validity_days' => 45,
+            'is_purchasable' => true,
+            'currency' => 'INR',
+        ])->assertOk()
+            ->assertJsonPath('data.key', 'whatsapp')
+            ->assertJsonPath('data.price_cents', 150000)
+            ->assertJsonPath('data.validity_days', 45);
+
+        $this->assertDatabaseHas('modules', [
+            'key' => 'whatsapp',
+            'price_cents' => 150000,
+            'validity_days' => 45,
+        ]);
     }
 }

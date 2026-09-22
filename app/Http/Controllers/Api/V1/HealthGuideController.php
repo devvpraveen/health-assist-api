@@ -29,12 +29,16 @@ class HealthGuideController extends Controller
     {
         $this->authorize('viewAny', HealthGuideConversation::class);
 
+        $user = $request->user();
+        // Patients have health_guide.view for their own chats — do not treat that as tenant-wide access.
+        $canViewTenantGuides = $user?->isSuperAdmin()
+            || ($user?->hasPermission('health_guide.view') && $user?->hasPermission('patients.view'));
+
         $conversations = HealthGuideConversation::query()
             ->with(['patient'])
             ->when(
-                ! $request->user()?->isSuperAdmin()
-                    && ! $request->user()?->hasPermission('health_guide.view'),
-                fn ($q) => $q->where('user_id', $request->user()?->id),
+                ! $canViewTenantGuides,
+                fn ($q) => $q->where('user_id', $user?->id),
             )
             ->when($request->filled('patient_id'), fn ($q) => $q->where('patient_id', $request->integer('patient_id')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->toString()))

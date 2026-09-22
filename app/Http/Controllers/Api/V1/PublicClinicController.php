@@ -4,9 +4,14 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PublicClinicResource;
+use App\Http\Resources\WorkingHourResource;
 use App\Models\Clinic;
+use App\Models\ClinicNotice;
+use App\Models\OrganizationReview;
+use App\Models\WorkingHour;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Str;
 
 class PublicClinicController extends Controller
 {
@@ -52,12 +57,61 @@ class PublicClinicController extends Controller
             })
             ->with([
                 'specialties',
-                'services' => fn ($q) => $q->where('is_public', true)->where('status', 'active'),
-                'providers' => fn ($q) => $q->where('is_public', true)->where('status', 'active'),
+                'services' => fn ($q) => $q->where('is_public', true)->where('status', 'active')->with('specialty'),
+                'providers' => fn ($q) => $q->where('is_public', true)->where('status', 'active')->with('specialties'),
                 'schedules' => fn ($q) => $q->where('is_active', true),
+                'organization',
             ])
             ->firstOrFail();
 
-        return new PublicClinicResource($clinic);
+        $hours = WorkingHour::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $clinic->tenant_id)
+            ->where('clinic_id', $clinic->id)
+            ->orderBy('day_of_week')
+            ->orderBy('shift_index')
+            ->get();
+
+        $notices = ClinicNotice::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $clinic->tenant_id)
+            ->where('status', 'published')
+            ->where('is_public', true)
+            ->latest('published_at')
+            ->limit(10)
+            ->get();
+
+        $reviews = OrganizationReview::query()
+            ->withoutGlobalScopes()
+            ->where('tenant_id', $clinic->tenant_id)
+            ->where('status', 'published')
+            ->latest()
+            ->limit(20)
+            ->get();
+
+        $sections = data_get($clinic->meta, 'public_sections')
+            ?? data_get($clinic->organization?->meta, 'public_sections')
+            ?? collect(['about', 'services', 'doctors', 'working_hours', 'appointments', 'facilities', 'videos', 'reviews', 'contact'])
+                ->values()
+                ->map(fn (string $key, int $i) => [
+                    'key' => $key,
+                    'label' => Str::headline($key),
+                    'visible' => true,
+                    'order' => $i + 1,
+                ])
+                ->all();
+
+        $resource = new PublicClinicResource($clinic);
+        $resource->additional([
+            'meta' => [
+                'working_hours' => WorkingHourResource::collection($hours),
+                'notices' => $notices,
+                'reviews' => $reviews,
+                'sections' => $sections,
+                'canonical_path' => '/provider/'.$clinic->slug,
+            ],
+        ]);
+
+        return $resource;
     }
 }

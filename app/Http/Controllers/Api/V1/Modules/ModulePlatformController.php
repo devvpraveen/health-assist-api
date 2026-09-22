@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\V1\Modules;
 
 use App\Actions\Modules\ActivateModuleAction;
 use App\Actions\Modules\AssignPackageToTenantAction;
+use App\Actions\Modules\CreateSaaSPackageAction;
 use App\Actions\Modules\DeactivateModuleAction;
+use App\Actions\Modules\PurchaseModulesAction;
 use App\Actions\Modules\ResolveEntitlementsAction;
 use App\Actions\Modules\ResolveTenantModulesAction;
 use App\Http\Controllers\Controller;
@@ -21,6 +23,7 @@ use App\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Throwable;
 
@@ -35,22 +38,115 @@ class ModulePlatformController extends Controller
         ]);
     }
 
-    public function packages(): JsonResponse
+    public function packages(Request $request): JsonResponse
     {
-        $packages = Package::query()
+        $includeInactive = $request->boolean('all')
+            && $request->user()?->isSuperAdmin();
+
+        $query = Package::query()
             ->with(['modules', 'entitlements', 'limits'])
-            ->where('is_active', true)
             ->orderBy('sort_order')
-            ->get();
+            ->orderBy('name');
+
+        if (! $includeInactive) {
+            $query->where('is_active', true);
+        }
 
         return response()->json([
-            'data' => PackageResource::collection($packages),
+            'data' => PackageResource::collection($query->get()),
+        ]);
+    }
+
+    public function storePackage(Request $request, CreateSaaSPackageAction $action): JsonResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $validated = $request->validate([
+            'key' => ['required', 'string', 'max:64', 'alpha_dash:ascii'],
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'clone_from' => ['nullable', 'string', 'exists:packages,key'],
+            'module_keys' => ['sometimes', 'array'],
+            'module_keys.*' => ['string', 'exists:modules,key'],
+            'price_monthly' => ['nullable', 'integer', 'min:0'],
+            'price_cents' => ['nullable', 'integer', 'min:0'],
+            'validity_days' => ['nullable', 'integer', 'min:1'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'is_active' => ['sometimes', 'boolean'],
+            'limits' => ['sometimes', 'array'],
+            'limits.patients' => ['nullable', 'integer', 'min:0'],
+            'limits.staff' => ['nullable', 'integer', 'min:0'],
+            'limits.branches' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        if (! isset($validated['price_cents']) && isset($validated['price_monthly'])) {
+            $validated['price_cents'] = ((int) $validated['price_monthly']) * 100;
+        }
+
+        $package = $action->handle($validated);
+
+        return response()->json([
+            'data' => new PackageResource($package),
+            'message' => 'SaaS package created.',
+        ], 201);
+    }
+
+    public function updatePackage(Request $request, string $package): JsonResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $model = Package::query()
+            ->where('key', $package)
+            ->when(ctype_digit($package), fn ($q) => $q->orWhere('id', (int) $package))
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'name' => ['sometimes', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'sort_order' => ['nullable', 'integer', 'min:0'],
+            'is_active' => ['sometimes', 'boolean'],
+            'price_monthly' => ['nullable', 'integer', 'min:0'],
+            'price_cents' => ['nullable', 'integer', 'min:0'],
+            'validity_days' => ['nullable', 'integer', 'min:1'],
+            'currency' => ['nullable', 'string', 'size:3'],
+        ]);
+
+        $metadata = $model->metadata ?? [];
+        if (array_key_exists('price_monthly', $validated)) {
+            $metadata['price_monthly'] = $validated['price_monthly'];
+            if (! array_key_exists('price_cents', $validated)) {
+                $validated['price_cents'] = ((int) $validated['price_monthly']) * 100;
+            }
+            unset($validated['price_monthly']);
+        }
+
+        $model->fill($validated);
+        $model->metadata = $metadata ?: null;
+        $model->save();
+
+        return response()->json([
+            'data' => new PackageResource($model->fresh()->load(['modules', 'entitlements', 'limits'])),
+            'message' => 'SaaS package updated.',
         ]);
     }
 
     public function publicPackages(): JsonResponse
     {
-        return $this->packages();
+        return $this->packages(request());
+    }
+
+    public function publicModules(): JsonResponse
+    {
+        $modules = PlatformModule::query()
+            ->where('is_purchasable', true)
+            ->where('status', 'active')
+            ->where('price_cents', '>', 0)
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'data' => PlatformModuleResource::collection($modules),
+        ]);
     }
 
     public function assignSubscription(
@@ -134,6 +230,66 @@ class ModulePlatformController extends Controller
                     'renews_at' => $subscription->renews_at,
                 ] : null,
             ],
+        ]);
+    }
+
+    public function purchaseModules(
+        Request $request,
+        PurchaseModulesAction $action,
+        ResolveTenantModulesAction $resolve,
+    ): JsonResponse {
+        $this->authorizeManage($request);
+        $tenant = $this->currentTenant($request);
+
+        $validated = $request->validate([
+            'module_keys' => ['required', 'array', 'min:1'],
+            'module_keys.*' => ['string', 'exists:modules,key'],
+        ]);
+
+        try {
+            $result = $action->handle($tenant, $validated['module_keys']);
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], $e instanceof RuntimeException ? 422 : 400);
+        }
+
+        return response()->json([
+            'data' => [
+                'line_items' => $result['line_items'],
+                'total_cents' => $result['total_cents'],
+                'currency' => $result['currency'],
+                'modules' => TenantModuleResource::collection(collect($result['modules'])),
+                'active_module_keys' => $resolve->handle($tenant->fresh()),
+            ],
+            'message' => 'Modules purchased and activated. Payment gateway is not required in this environment.',
+            'disclaimer' => 'Module access is billed per module amount and validity. AI remains assistive only.',
+        ]);
+    }
+
+    public function updateModule(Request $request, string $moduleKey): JsonResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $module = PlatformModule::query()->where('key', $moduleKey)->firstOrFail();
+
+        $validated = $request->validate([
+            'price_cents' => ['sometimes', 'integer', 'min:0'],
+            'currency' => ['sometimes', 'string', 'size:3'],
+            'validity_days' => ['nullable', 'integer', 'min:1'],
+            'is_purchasable' => ['sometimes', 'boolean'],
+            'description' => ['nullable', 'string', 'max:2000'],
+            'status' => ['sometimes', 'string', Rule::in(['active', 'inactive', 'deprecated'])],
+        ]);
+
+        $module->fill($validated);
+        $module->save();
+
+        return response()->json([
+            'data' => new PlatformModuleResource($module->fresh()),
+            'message' => 'Module pricing updated.',
         ]);
     }
 

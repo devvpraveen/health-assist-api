@@ -7,6 +7,7 @@ use App\Actions\Appointments\CancelAppointmentAction;
 use App\Actions\Appointments\CheckInAppointmentAction;
 use App\Actions\Appointments\RescheduleAppointmentAction;
 use App\Actions\Appointments\UpdateAppointmentStatusAction;
+use App\Actions\Providers\EnsureLinkedProviderAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\CancelAppointmentRequest;
 use App\Http\Requests\Api\V1\RescheduleAppointmentRequest;
@@ -24,9 +25,32 @@ class AppointmentController extends Controller
     {
         $this->authorize('viewAny', Appointment::class);
 
+        $user = $request->user();
         $query = Appointment::query()
             ->with(['patient', 'provider', 'clinic', 'service'])
             ->latest('starts_at');
+
+        if ($user && ! $user->isSuperAdmin()) {
+            if ($user->canViewClinicAppointmentBoard()) {
+                // Clinic / org staff: full tenant board (tenant scope still applies).
+            } elseif ($user->hasRole('provider') || $user->hasLinkedProvider()) {
+                // Doctors only see appointments on their own provider profile(s).
+                if ($user->hasRole('provider') && ! $user->hasLinkedProvider()) {
+                    app(EnsureLinkedProviderAction::class)->handle($user);
+                }
+                $providerIds = $user->linkedProviderIds();
+                if ($providerIds === []) {
+                    $query->whereRaw('0 = 1');
+                } else {
+                    $query->whereIn('provider_id', $providerIds);
+                }
+            } elseif (! $user->hasPermission('appointments.view')) {
+                // Linked patients may only see their own appointments.
+                $query->whereHas('patient', function ($patientQuery) use ($user): void {
+                    $patientQuery->where('user_id', $user->id);
+                });
+            }
+        }
 
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);

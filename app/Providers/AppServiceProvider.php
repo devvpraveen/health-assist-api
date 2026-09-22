@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Contracts\AI\AIProviderInterface;
 use App\Contracts\Auth\EmailOtpProvider;
+use App\Contracts\Auth\FirebaseAuthProvider;
 use App\Contracts\Auth\GoogleAuthProvider;
 use App\Contracts\Auth\MobileOtpProvider;
 use App\Contracts\Billing\PaymentGatewayInterface;
@@ -53,6 +54,7 @@ use App\Services\AI\Providers\OpenAICompatibleProvider;
 use App\Services\Auth\Providers\DevEmailOtpProvider;
 use App\Services\Auth\Providers\DevGoogleAuthProvider;
 use App\Services\Auth\Providers\DevMobileOtpProvider;
+use App\Services\Auth\Providers\FirebaseIdTokenProvider;
 use App\Services\Billing\ManualPaymentGateway;
 use App\Services\Integrity\NullRecordIntegrityVerifier;
 use App\Services\Marketing\Analytics\AnalyticsManager;
@@ -108,6 +110,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(MobileOtpProvider::class, DevMobileOtpProvider::class);
         $this->app->bind(EmailOtpProvider::class, DevEmailOtpProvider::class);
         $this->app->bind(GoogleAuthProvider::class, DevGoogleAuthProvider::class);
+        $this->app->bind(FirebaseAuthProvider::class, FirebaseIdTokenProvider::class);
 
         $this->app->singleton(AnalyticsGatewayInterface::class, function (): AnalyticsGatewayInterface {
             return new AnalyticsManager;

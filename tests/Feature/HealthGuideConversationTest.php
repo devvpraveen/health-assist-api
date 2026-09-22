@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\HealthGuideConversation;
 use App\Models\HealthGuideMessage;
 use App\Models\Patient;
+use App\Models\Role;
+use App\Models\User;
 use App\Support\TenantContext;
 use Database\Seeders\AiCoreSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -66,5 +68,47 @@ class HealthGuideConversationTest extends TestCase
             'uuid' => $uuid,
             'safety_level' => $response->json('safety.level'),
         ]);
+    }
+
+    public function test_patient_persona_only_lists_own_conversations(): void
+    {
+        [$staff] = $this->createTenantUserWithOrg();
+        $tenant = $staff->tenant;
+
+        $other = User::factory()->forTenant($tenant)->create();
+        $otherConversation = HealthGuideConversation::query()->create([
+            'tenant_id' => $tenant->id,
+            'user_id' => $other->id,
+            'status' => HealthGuideConversation::STATUS_ACTIVE,
+            'locale' => 'en',
+        ]);
+
+        $patientUser = User::factory()->forTenant($tenant)->create();
+        $patientRole = Role::query()->where('slug', 'patient')->whereNull('tenant_id')->firstOrFail();
+        $patientUser->roles()->attach($patientRole->id, [
+            'tenant_id' => $tenant->id,
+            'branch_id' => null,
+            'branch_key' => 'none',
+        ]);
+
+        $mine = HealthGuideConversation::query()->create([
+            'tenant_id' => $tenant->id,
+            'user_id' => $patientUser->id,
+            'status' => HealthGuideConversation::STATUS_ACTIVE,
+            'locale' => 'en',
+        ]);
+
+        Sanctum::actingAs($patientUser);
+        TenantContext::set($tenant->id);
+
+        $list = $this->getJson('/api/v1/health-guide/conversations')
+            ->assertOk();
+
+        $uuids = collect($list->json('data'))->pluck('uuid');
+        $this->assertTrue($uuids->contains($mine->uuid));
+        $this->assertCount(1, $uuids);
+
+        $this->getJson('/api/v1/health-guide/conversations/'.$otherConversation->uuid)
+            ->assertForbidden();
     }
 }

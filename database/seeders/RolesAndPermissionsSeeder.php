@@ -260,5 +260,94 @@ class RolesAndPermissionsSeeder extends Seeder
                 'experiments.manage',
             ])->pluck('id')
         );
+
+        // Self-serve personas for OTP / signup onboarding.
+        $patient = Role::query()->updateOrCreate(
+            ['tenant_key' => 'system', 'slug' => 'patient'],
+            ['name' => 'Patient', 'tenant_id' => null],
+        );
+        $patient->permissions()->sync(
+            Permission::query()->whereIn('slug', [
+                'health_guide.view',
+                'health_guide.run',
+                'wellness.view',
+                'medications.view',
+                'medications.manage',
+            ])->pluck('id')
+        );
+
+        $provider = Role::query()->updateOrCreate(
+            ['tenant_key' => 'system', 'slug' => 'provider'],
+            ['name' => 'Doctor / Provider', 'tenant_id' => null],
+        );
+        $provider->permissions()->sync(
+            Permission::query()->whereIn('slug', [
+                'patients.view',
+                'patients.records.view',
+                'patients.documents.view',
+                'appointments.view',
+                'appointments.manage',
+                'appointments.queue.manage',
+                'providers.view',
+                'schedules.view',
+                'clinical.assessments.view',
+                'clinical.notes.view',
+                'clinical.treatment.view',
+                'clinical.progress.view',
+                'clinical.discharge.view',
+                'clinical.exercises.view',
+                'health_guide.view',
+                'health_guide.run',
+                'ai.view',
+                'ai.run',
+                'reports.view',
+                'medications.view',
+            ])->pluck('id')
+        );
+
+        $clinicAdmin = Role::query()->updateOrCreate(
+            ['tenant_key' => 'system', 'slug' => 'clinic_admin'],
+            ['name' => 'Clinic', 'tenant_id' => null],
+        );
+        $clinicAdmin->permissions()->sync(
+            Permission::query()->whereIn('slug', [
+                'organizations.view',
+                'organizations.manage',
+                'branches.view',
+                'patients.view',
+                'patients.manage',
+                'patients.records.view',
+                'patients.records.manage',
+                'patients.documents.view',
+                'patients.documents.manage',
+                'clinics.view',
+                'clinics.manage',
+                'providers.view',
+                'providers.manage',
+                'specialties.view',
+                'services.view',
+                'services.manage',
+                'schedules.view',
+                'schedules.manage',
+                'appointments.view',
+                'appointments.manage',
+                'appointments.queue.manage',
+                'clinical.assessments.view',
+                'clinical.assessments.manage',
+                'clinical.notes.view',
+                'clinical.notes.manage',
+                'clinical.treatment.view',
+                'clinical.treatment.manage',
+                'billing.invoices.view',
+                'billing.payments.view',
+                'billing.packages.view',
+                'ai.view',
+                'health_guide.view',
+                'reports.view',
+                'reports.analyze',
+                'medications.view',
+                'wellness.view',
+            ])->pluck('id')
+        );
     }
 }

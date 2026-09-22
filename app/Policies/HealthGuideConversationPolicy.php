@@ -22,7 +22,8 @@ class HealthGuideConversationPolicy
             return true;
         }
 
-        return $user->tenant_id === $conversation->tenant_id
+        // Staff only — patients with health_guide.view must not read other patients' chats.
+        return $this->canAccessTenantGuidesAsStaff($user, $conversation)
             && $user->hasPermission('health_guide.view');
     }
 
@@ -44,7 +45,16 @@ class HealthGuideConversationPolicy
             return true;
         }
 
-        return $user->tenant_id === $conversation->tenant_id
+        return $this->canAccessTenantGuidesAsStaff($user, $conversation)
             && $user->hasPermission('health_guide.run');
+    }
+
+    /**
+     * Clinic/staff roles have patients.view; self-serve patients do not.
+     */
+    private function canAccessTenantGuidesAsStaff(User $user, HealthGuideConversation $conversation): bool
+    {
+        return $user->tenant_id === $conversation->tenant_id
+            && $user->hasPermission('patients.view');
     }
 }

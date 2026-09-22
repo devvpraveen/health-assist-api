@@ -25,6 +25,10 @@ use Illuminate\Support\Str;
  * @property array<string, mixed>|null $configuration_schema
  * @property array<string, mixed>|null $settings_schema
  * @property array<string, mixed>|null $metadata
+ * @property int $price_cents
+ * @property string $currency
+ * @property int|null $validity_days
+ * @property bool $is_purchasable
  */
 #[Fillable([
     'uuid',
@@ -35,6 +39,10 @@ use Illuminate\Support\Str;
     'category',
     'version',
     'status',
+    'price_cents',
+    'currency',
+    'validity_days',
+    'is_purchasable',
     'dependencies',
     'optional_dependencies',
     'conflicts',
@@ -51,6 +59,9 @@ class PlatformModule extends Model
         'category' => 'clinical',
         'version' => '1.0.0',
         'status' => 'active',
+        'price_cents' => 0,
+        'currency' => 'INR',
+        'is_purchasable' => true,
     ];
 
     protected static function booted(): void
@@ -78,6 +89,9 @@ class PlatformModule extends Model
             'configuration_schema' => 'array',
             'settings_schema' => 'array',
             'metadata' => 'array',
+            'price_cents' => 'integer',
+            'validity_days' => 'integer',
+            'is_purchasable' => 'boolean',
         ];
     }
 

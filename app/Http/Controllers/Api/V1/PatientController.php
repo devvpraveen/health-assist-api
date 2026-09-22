@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Patients\CreatePatientAction;
+use App\Actions\Patients\EnsureLinkedPatientAction;
 use App\Actions\Patients\UpdatePatientAction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\StorePatientRequest;
@@ -17,15 +18,27 @@ use Illuminate\Http\Response;
 
 class PatientController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request, EnsureLinkedPatientAction $ensureLinkedPatient): AnonymousResourceCollection
     {
+        $user = $request->user();
+
+        // OTP / patient-portal users need a chart before self-scoped listing & booking.
+        if (
+            $user
+            && $user->tenant_id
+            && ! $user->isSuperAdmin()
+            && ! $user->hasPermission('patients.view')
+        ) {
+            $ensureLinkedPatient->handle($user);
+        }
+
         $this->authorize('viewAny', Patient::class);
 
-        $query = Patient::query()->latest();
+        $query = Patient::query()->with('tenant')->latest();
 
         // Linked patient accounts can list only their own profile(s).
-        if (! $request->user()?->isSuperAdmin() && ! $request->user()?->hasPermission('patients.view')) {
-            $query->where('user_id', $request->user()->id);
+        if (! $user?->isSuperAdmin() && ! $user?->hasPermission('patients.view')) {
+            $query->where('user_id', $user->id);
         }
 
         if ($search = $request->string('q')->toString()) {
@@ -37,14 +50,16 @@ class PatientController extends Controller
             });
         }
 
-        return PatientResource::collection($query->paginate());
+        return PatientResource::collection($query->paginate(
+            min(200, max(1, (int) $request->integer('per_page', 50)))
+        ));
     }
 
     public function store(StorePatientRequest $request, CreatePatientAction $action): JsonResponse
     {
         $patient = $action->handle($request->validated());
 
-        return (new PatientResource($patient))
+        return (new PatientResource($patient->load('tenant')))
             ->response()
             ->setStatusCode(201);
     }
@@ -57,12 +72,14 @@ class PatientController extends Controller
             'patient_uuid' => $patient->uuid,
         ]);
 
-        return new PatientResource($patient->load('healthProfile'));
+        return new PatientResource($patient->load(['healthProfile', 'tenant']));
     }
 
     public function update(UpdatePatientRequest $request, Patient $patient, UpdatePatientAction $action): PatientResource
     {
-        return new PatientResource($action->handle($patient, $request->validated()));
+        return new PatientResource(
+            $action->handle($patient, $request->validated())->load('tenant')
+        );
     }
 
     public function destroy(Patient $patient, AuditLogger $auditLogger): Response

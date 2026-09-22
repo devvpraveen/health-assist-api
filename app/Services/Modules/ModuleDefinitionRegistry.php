@@ -16,13 +16,14 @@ use App\Modules\Definitions\PatientsModule;
 use App\Modules\Definitions\ProvidersModule;
 use App\Modules\Definitions\ReportsModule;
 use App\Modules\Definitions\SeoModule;
+use App\Modules\Definitions\StubCapabilityModule;
 use App\Modules\Definitions\WellnessModule;
 use App\Modules\Definitions\WhatsappModule;
 use InvalidArgumentException;
 
 class ModuleDefinitionRegistry
 {
-    /** @var array<string, class-string<HealthAssistModule>> */
+    /** @var array<string, class-string<HealthAssistModule>|callable(): HealthAssistModule> */
     private array $definitions = [
         'core' => CoreModule::class,
         'patients' => PatientsModule::class,
@@ -41,12 +42,40 @@ class ModuleDefinitionRegistry
         'crm' => CrmModule::class,
     ];
 
+    public function __construct()
+    {
+        $stubs = [
+            'prescriptions' => ['Prescriptions', 'Create and share prescriptions as PDFs.', 'clinical', ['core', 'patients'], ['prescriptions']],
+            'certificates' => ['Certificates', 'Medical, fitness, and custom certificates.', 'clinical', ['core', 'patients'], ['certificates']],
+            'estimates' => ['Estimates', 'Treatment estimates and quotes.', 'billing', ['core', 'billing'], ['estimates']],
+            'pharmacy' => ['Pharmacy', 'Dispense and inventory for on-site pharmacy.', 'clinical', ['core', 'medications'], ['pharmacy']],
+            'lab' => ['Laboratory', 'Lab orders and results.', 'clinical', ['core', 'patients'], ['lab']],
+            'inventory' => ['Inventory', 'Clinic inventory and stock.', 'operations', ['core'], ['inventory']],
+            'notice_board' => ['Notice Board', 'Clinic notices and announcements.', 'growth', ['core'], ['notice_board']],
+            'reviews' => ['Reviews', 'Patient feedback and public reviews.', 'growth', ['core'], ['reviews']],
+            'media' => ['Media Manager', 'Photos, videos, and facility media.', 'growth', ['core'], ['media']],
+            'staff_hr' => ['Staff', 'Staff profiles, attendance, and roster.', 'operations', ['core', 'providers'], ['staff']],
+            'ai_receptionist' => ['AI Receptionist', 'FAQ, booking, and escalation via chat/WhatsApp.', 'ai', ['core', 'ai', 'appointments'], ['ai_receptionist']],
+        ];
+
+        foreach ($stubs as $key => [$name, $description, $category, $deps, $nav]) {
+            $this->definitions[$key] = fn () => new StubCapabilityModule(
+                $key,
+                $name,
+                $description,
+                $category,
+                $deps,
+                $nav,
+            );
+        }
+    }
+
     /**
      * @return list<HealthAssistModule>
      */
     public function all(): array
     {
-        return array_map(fn (string $class) => app($class), array_values($this->definitions));
+        return array_map(fn (string $key) => $this->get($key), array_keys($this->definitions));
     }
 
     public function get(string $key): HealthAssistModule
@@ -55,7 +84,12 @@ class ModuleDefinitionRegistry
             throw new InvalidArgumentException("Unknown module [{$key}].");
         }
 
-        return app($this->definitions[$key]);
+        $entry = $this->definitions[$key];
+        if (is_callable($entry)) {
+            return $entry();
+        }
+
+        return app($entry);
     }
 
     public function has(string $key): bool

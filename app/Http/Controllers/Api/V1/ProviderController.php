@@ -25,7 +25,7 @@ class ProviderController extends Controller
     {
         $this->authorize('viewAny', Provider::class);
 
-        $query = Provider::query()->with(['specialties', 'clinic'])->latest();
+        $query = Provider::query()->with(['specialties', 'clinic', 'tenant'])->latest();
 
         if ($clinicId = $request->integer('clinic_id')) {
             $query->where('clinic_id', $clinicId);
@@ -39,14 +39,16 @@ class ProviderController extends Controller
             });
         }
 
-        return ProviderResource::collection($query->paginate());
+        return ProviderResource::collection($query->paginate(
+            min(200, max(1, (int) $request->integer('per_page', 50)))
+        ));
     }
 
     public function store(StoreProviderRequest $request, CreateProviderAction $action): JsonResponse
     {
         $provider = $action->handle($request->validated());
 
-        return (new ProviderResource($provider->load(['specialties', 'clinic'])))
+        return (new ProviderResource($provider->load(['specialties', 'clinic', 'tenant'])))
             ->response()
             ->setStatusCode(201);
     }
@@ -56,7 +58,7 @@ class ProviderController extends Controller
         $this->authorize('view', $provider);
 
         return new ProviderResource(
-            $provider->load(['specialties', 'branches', 'schedules', 'clinic'])
+            $provider->load(['specialties', 'branches', 'schedules', 'clinic', 'tenant'])
         );
     }
 
@@ -66,7 +68,7 @@ class ProviderController extends Controller
         UpdateProviderAction $action,
     ): ProviderResource {
         return new ProviderResource(
-            $action->handle($provider, $request->validated())->load(['specialties', 'clinic'])
+            $action->handle($provider, $request->validated())->load(['specialties', 'clinic', 'tenant'])
         );
     }
 

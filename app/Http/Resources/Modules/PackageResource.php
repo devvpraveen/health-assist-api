@@ -21,6 +21,11 @@ class PackageResource extends JsonResource
             'slug' => $this->slug,
             'description' => $this->description,
             'sort_order' => $this->sort_order,
+            'is_active' => $this->is_active,
+            'price_cents' => (int) $this->price_cents,
+            'currency' => $this->currency ?: 'INR',
+            'validity_days' => $this->validity_days,
+            'metadata' => $this->metadata,
             'modules' => $this->whenLoaded('modules', function () {
                 return $this->modules->map(fn ($m) => [
                     'key' => $m->key,

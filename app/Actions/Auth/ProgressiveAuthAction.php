@@ -3,7 +3,9 @@
 namespace App\Actions\Auth;
 
 use App\Actions\HealthGuide\ClaimGuestConversationAction;
+use App\Actions\Patients\EnsureLinkedPatientAction;
 use App\Contracts\Auth\EmailOtpProvider;
+use App\Contracts\Auth\FirebaseAuthProvider;
 use App\Contracts\Auth\GoogleAuthProvider;
 use App\Contracts\Auth\MobileOtpProvider;
 use App\Models\GuestSession;
@@ -21,7 +23,9 @@ class ProgressiveAuthAction
         private MobileOtpProvider $mobileOtpProvider,
         private EmailOtpProvider $emailOtpProvider,
         private GoogleAuthProvider $googleAuthProvider,
+        private FirebaseAuthProvider $firebaseAuthProvider,
         private ClaimGuestConversationAction $claimGuestConversationAction,
+        private EnsureLinkedPatientAction $ensureLinkedPatientAction,
         private AuditLogger $auditLogger,
     ) {}
 
@@ -82,6 +86,33 @@ class ProgressiveAuthAction
     /**
      * @return array{token: string, user: User, migration: array<string, mixed>|null}
      */
+    public function authenticateFirebase(
+        string $idToken,
+        ?string $guestSessionUuid = null,
+        string $deviceName = 'api',
+    ): array {
+        $profile = $this->firebaseAuthProvider->verifyIdToken($idToken);
+        $tenantId = TenantContext::id();
+
+        if (! empty($profile['phone'])) {
+            $user = $this->findOrCreateUserByPhone($this->normalizeMobile($profile['phone']), $tenantId);
+            if (! empty($profile['name']) && $user->name === 'Patient') {
+                $user->forceFill(['name' => $profile['name']])->save();
+            }
+        } elseif (! empty($profile['email'])) {
+            $user = $this->findOrCreateUserByEmail($profile['email'], $tenantId, $profile['name'] ?? null);
+        } else {
+            throw ValidationException::withMessages([
+                'id_token' => ['Firebase token must include a phone number or email.'],
+            ]);
+        }
+
+        return $this->issueSession($user, $deviceName, 'firebase', $guestSessionUuid);
+    }
+
+    /**
+     * @return array{token: string, user: User, migration: array<string, mixed>|null}
+     */
     public function authenticateGoogle(
         string $idToken,
         ?string $guestSessionUuid = null,
@@ -116,19 +147,20 @@ class ProgressiveAuthAction
                 ->where('uuid', $guestSessionUuid)
                 ->first();
 
-            if ($session === null) {
-                throw ValidationException::withMessages([
-                    'guest_session_id' => ['Guest session not found.'],
-                ]);
+            // Stale/expired guest IDs must not block a successful OTP login.
+            if ($session !== null) {
+                try {
+                    $claimed = $this->claimGuestConversationAction->handle($user, $session);
+                    $migration = [
+                        'migrated' => $claimed['migrated'],
+                        'message' => $claimed['message'],
+                        'conversation_uuid' => $claimed['conversation']?->uuid,
+                        'guest_session_uuid' => $claimed['guest_session']->uuid,
+                    ];
+                } catch (ValidationException) {
+                    $migration = null;
+                }
             }
-
-            $claimed = $this->claimGuestConversationAction->handle($user, $session);
-            $migration = [
-                'migrated' => $claimed['migrated'],
-                'message' => $claimed['message'],
-                'conversation_uuid' => $claimed['conversation']->uuid,
-                'guest_session_uuid' => $claimed['guest_session']->uuid,
-            ];
         }
 
         $this->auditLogger->log('auth.progressive.login', $user, [
@@ -138,7 +170,7 @@ class ProgressiveAuthAction
 
         return [
             'token' => $token,
-            'user' => $user->fresh(['tenant']),
+            'user' => $user->fresh(['roles.permissions', 'tenant']),
             'migration' => $migration,
         ];
     }
@@ -146,37 +178,41 @@ class ProgressiveAuthAction
     private function findOrCreateUserByPhone(string $mobile, ?int $tenantId): User
     {
         $user = User::query()->where('phone', $mobile)->first();
-        if ($user) {
-            return $user;
+        if ($user === null) {
+            $user = User::query()->create([
+                'name' => 'Patient',
+                'email' => 'mobile+'.preg_replace('/\D+/', '', $mobile).'@users.healthassist.local',
+                'phone' => $mobile,
+                'password' => Hash::make(Str::random(32)),
+                'tenant_id' => $tenantId ?? TenantContext::id(),
+                'status' => 'active',
+                'email_verified_at' => now(),
+            ]);
         }
 
-        return User::query()->create([
-            'name' => 'Patient',
-            'email' => 'mobile+'.preg_replace('/\D+/', '', $mobile).'@users.healthassist.local',
-            'phone' => $mobile,
-            'password' => Hash::make(Str::random(32)),
-            'tenant_id' => $tenantId ?? TenantContext::id(),
-            'status' => 'active',
-            'email_verified_at' => now(),
-        ]);
+        $this->ensureLinkedPatientAction->handle($user);
+
+        return $user;
     }
 
     private function findOrCreateUserByEmail(string $email, ?int $tenantId, ?string $name = null): User
     {
         $email = strtolower(trim($email));
         $user = User::query()->where('email', $email)->first();
-        if ($user) {
-            return $user;
+        if ($user === null) {
+            $user = User::query()->create([
+                'name' => $name ?: (explode('@', $email)[0] ?: 'Patient'),
+                'email' => $email,
+                'password' => Hash::make(Str::random(32)),
+                'tenant_id' => $tenantId ?? TenantContext::id(),
+                'status' => 'active',
+                'email_verified_at' => now(),
+            ]);
         }
 
-        return User::query()->create([
-            'name' => $name ?: (explode('@', $email)[0] ?: 'Patient'),
-            'email' => $email,
-            'password' => Hash::make(Str::random(32)),
-            'tenant_id' => $tenantId ?? TenantContext::id(),
-            'status' => 'active',
-            'email_verified_at' => now(),
-        ]);
+        $this->ensureLinkedPatientAction->handle($user);
+
+        return $user;
     }
 
     private function normalizeMobile(string $mobile): string

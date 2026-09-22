@@ -17,6 +17,12 @@ class EnsureModuleEnabled
      */
     public function handle(Request $request, Closure $next, string $moduleKey): Response
     {
+        $user = $request->user();
+        // Platform console operates cross-tenant; modules are a clinic-scope gate.
+        if ($user?->isSuperAdmin() || $user?->isPlatformAdmin()) {
+            return $next($request);
+        }
+
         $tenantId = TenantContext::id();
         if ($tenantId === null) {
             abort(403, 'Tenant context required for module access.');

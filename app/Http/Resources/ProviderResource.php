@@ -20,6 +20,11 @@ class ProviderResource extends JsonResource
             'id' => $this->id,
             'uuid' => $this->uuid,
             'tenant_id' => $this->tenant_id,
+            'tenant_uuid' => $this->relationLoaded('tenant')
+                ? $this->tenant?->uuid
+                : ($this->relationLoaded('clinic') && $this->clinic?->relationLoaded('tenant')
+                    ? $this->clinic->tenant?->uuid
+                    : null),
             'user_id' => $this->user_id,
             'clinic_id' => $this->clinic_id,
             'first_name' => $this->first_name,

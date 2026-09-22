@@ -20,31 +20,18 @@ class ClaimGuestConversationAction
     /**
      * @return array{
      *     guest_session: GuestSession,
-     *     conversation: HealthGuideConversation,
+     *     conversation: HealthGuideConversation|null,
      *     migrated: bool,
      *     message: string
      * }
      */
     public function handle(User $user, GuestSession $session): array
     {
-        if ($session->isExpired() && ! $session->isClaimed()) {
-            throw ValidationException::withMessages([
-                'guest_session_id' => ['This guest session has expired.'],
-            ]);
-        }
-
-        // Idempotent: already claimed by this user.
+        // Idempotent: already claimed by this user (expires_at is closed at claim time).
         if ($session->isClaimed() && (int) $session->claimed_by_user_id === (int) $user->id) {
-            $conversation = $session->conversation?->load(['messages', 'patient']);
-            if ($conversation === null) {
-                throw ValidationException::withMessages([
-                    'guest_session_id' => ['Guest conversation is missing.'],
-                ]);
-            }
-
             return [
                 'guest_session' => $session,
-                'conversation' => $conversation,
+                'conversation' => $this->resolveConversation($session),
                 'migrated' => false,
                 'message' => 'My conversation has been saved.',
             ];
@@ -56,6 +43,7 @@ class ClaimGuestConversationAction
             ]);
         }
 
+        // Allow claiming expired-but-unclaimed sessions so login after a long guest chat still works.
         return DB::transaction(function () use ($user, $session): array {
             TenantContext::set($session->tenant_id);
 
@@ -67,11 +55,20 @@ class ClaimGuestConversationAction
                 ]);
             }
 
-            $conversation = $session->conversation;
+            $conversation = $this->resolveConversation($session);
             if ($conversation === null) {
-                throw ValidationException::withMessages([
-                    'guest_session_id' => ['Guest conversation is missing.'],
-                ]);
+                // Nothing to migrate — mark claimed so clients stop retrying.
+                $session->claimed_at = now();
+                $session->claimed_by_user_id = $user->id;
+                $session->expires_at = now();
+                $session->save();
+
+                return [
+                    'guest_session' => $session->fresh(),
+                    'conversation' => null,
+                    'migrated' => false,
+                    'message' => 'Guest session linked. No conversation to save.',
+                ];
             }
 
             $patient = Patient::query()
@@ -122,6 +119,30 @@ class ClaimGuestConversationAction
                 'message' => 'My conversation has been saved.',
             ];
         });
+    }
+
+    private function resolveConversation(GuestSession $session): ?HealthGuideConversation
+    {
+        $conversation = $session->conversation;
+        if ($conversation) {
+            return $conversation->loadMissing(['messages', 'patient']);
+        }
+
+        if ($session->conversation_id) {
+            $byId = HealthGuideConversation::query()
+                ->withoutGlobalScopes()
+                ->with(['messages', 'patient'])
+                ->find($session->conversation_id);
+            if ($byId) {
+                return $byId;
+            }
+        }
+
+        return HealthGuideConversation::query()
+            ->withoutGlobalScopes()
+            ->with(['messages', 'patient'])
+            ->where('guest_session_id', $session->id)
+            ->first();
     }
 
     private function firstNameFromUser(User $user): string

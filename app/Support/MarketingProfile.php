@@ -6,6 +6,8 @@ namespace App\Support;
  * Shared marketing profile shape stored on Clinic/Organization meta.profile.
  *
  * @phpstan-type Highlight array{label: string, value: string}
+ * @phpstan-type Feature array{title: string, description: string}
+ * @phpstan-type BookingStep array{title: string, description: string}
  * @phpstan-type Testimonial array{quote: string, author: string, role?: string|null}
  * @phpstan-type Profile array{
  *   tagline?: string|null,
@@ -15,6 +17,8 @@ namespace App\Support;
  *   about?: string|null,
  *   booking_benefits?: list<string>,
  *   highlights?: list<Highlight>,
+ *   features?: list<Feature>,
+ *   booking_steps?: list<BookingStep>,
  *   testimonials?: list<Testimonial>,
  *   gallery?: list<string>,
  *   cta_label?: string|null,
@@ -41,6 +45,8 @@ class MarketingProfile
             'about' => self::stringOrNull($profile['about'] ?? null),
             'booking_benefits' => self::stringList($profile['booking_benefits'] ?? null),
             'highlights' => self::highlights($profile['highlights'] ?? null),
+            'features' => self::titledItems($profile['features'] ?? null),
+            'booking_steps' => self::titledItems($profile['booking_steps'] ?? null),
             'testimonials' => self::testimonials($profile['testimonials'] ?? null),
             'gallery' => self::stringList($profile['gallery'] ?? null),
             'cta_label' => self::stringOrNull($profile['cta_label'] ?? null),
@@ -139,6 +145,33 @@ class MarketingProfile
                     'quote' => $quote,
                     'author' => $author,
                     'role' => self::stringOrNull($row['role'] ?? null),
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<Feature>|list<BookingStep>
+     */
+    private static function titledItems(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($value as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $title = self::stringOrNull($row['title'] ?? null);
+            $description = self::stringOrNull($row['description'] ?? null);
+            if ($title && $description) {
+                $out[] = [
+                    'title' => $title,
+                    'description' => $description,
                 ];
             }
         }

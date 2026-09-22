@@ -13,8 +13,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'status',
     'source',
     'configuration',
+    'paid_cents',
+    'currency',
     'activated_at',
+    'starts_at',
+    'expires_at',
     'deactivated_at',
+    'purchase_meta',
 ])]
 class TenantModule extends Model
 {
@@ -42,14 +47,26 @@ class TenantModule extends Model
     {
         return [
             'configuration' => 'array',
+            'purchase_meta' => 'array',
+            'paid_cents' => 'integer',
             'activated_at' => 'datetime',
+            'starts_at' => 'datetime',
+            'expires_at' => 'datetime',
             'deactivated_at' => 'datetime',
         ];
     }
 
     public function isActive(): bool
     {
-        return $this->status === self::STATUS_ACTIVE;
+        if ($this->status !== self::STATUS_ACTIVE) {
+            return false;
+        }
+
+        if ($this->expires_at !== null && $this->expires_at->isPast()) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

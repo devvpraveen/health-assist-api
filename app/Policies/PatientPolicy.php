@@ -9,9 +9,11 @@ class PatientPolicy
 {
     public function viewAny(User $user): bool
     {
+        // Tenant users may list their own chart (possibly empty / auto-created).
         return $user->isSuperAdmin()
             || $user->hasPermission('patients.view')
-            || $user->hasLinkedPatient();
+            || $user->hasLinkedPatient()
+            || $user->tenant_id !== null;
     }
 
     public function view(User $user, Patient $patient): bool

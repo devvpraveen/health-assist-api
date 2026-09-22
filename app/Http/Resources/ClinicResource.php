@@ -21,6 +21,7 @@ class ClinicResource extends JsonResource
             'id' => $this->id,
             'uuid' => $this->uuid,
             'tenant_id' => $this->tenant_id,
+            'tenant_uuid' => $this->relationLoaded('tenant') ? $this->tenant?->uuid : null,
             'organization_id' => $this->organization_id,
             'primary_branch_id' => $this->primary_branch_id,
             'name' => $this->name,

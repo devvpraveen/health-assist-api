@@ -20,4 +20,9 @@ return [
         'stub_allowed' => (bool) env('AUTH_GOOGLE_STUB_ALLOWED', true),
     ],
 
+    'firebase' => [
+        'api_key' => env('FIREBASE_WEB_API_KEY', env('NEXT_PUBLIC_FIREBASE_API_KEY', '')),
+        'stub_allowed' => (bool) env('AUTH_FIREBASE_STUB_ALLOWED', true),
+    ],
+
 ];

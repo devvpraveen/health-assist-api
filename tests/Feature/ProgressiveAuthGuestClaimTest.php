@@ -117,6 +117,21 @@ class ProgressiveAuthGuestClaimTest extends TestCase
         $this->assertNotEmpty($google->json('token'));
     }
 
+    public function test_firebase_phone_stub_issues_session(): void
+    {
+        config(['auth_providers.firebase.api_key' => '']);
+        config(['auth_providers.firebase.stub_allowed' => true]);
+
+        $response = $this->withHeaders(['X-Tenant-Slug' => 'healthassist-demo'])
+            ->postJson('/api/v1/auth/firebase', [
+                'id_token' => 'firebase:+919876543210',
+            ])
+            ->assertOk();
+
+        $this->assertNotEmpty($response->json('token'));
+        $this->assertSame('+919876543210', $response->json('user.phone'));
+    }
+
     public function test_wrong_otp_is_rejected(): void
     {
         $otp = $this->withHeaders(['X-Tenant-Slug' => 'healthassist-demo'])
@@ -157,5 +172,25 @@ class ProgressiveAuthGuestClaimTest extends TestCase
         $this->assertDatabaseCount('patients', 1);
         $this->assertInstanceOf(GuestSession::class, GuestSession::query()->where('uuid', $guestUuid)->first());
         $this->assertInstanceOf(Patient::class, Patient::query()->where('user_id', $user->id)->first());
+    }
+
+    public function test_claim_already_taken_by_another_user_soft_fails(): void
+    {
+        $start = $this->withHeaders(['X-Tenant-Slug' => 'healthassist-demo'])
+            ->postJson('/api/v1/public/health-guide/sessions')
+            ->assertCreated();
+        $guestUuid = $start->json('data.guest_session.uuid');
+
+        $owner = User::factory()->create(['tenant_id' => $this->tenant->id]);
+        Sanctum::actingAs($owner);
+        $this->postJson('/api/v1/auth/guest/claim', [
+            'guest_session_id' => $guestUuid,
+        ])->assertOk()->assertJsonPath('data.migrated', true);
+
+        $other = User::factory()->create(['tenant_id' => $this->tenant->id]);
+        Sanctum::actingAs($other);
+        $this->postJson('/api/v1/auth/guest/claim', [
+            'guest_session_id' => $guestUuid,
+        ])->assertOk()->assertJsonPath('data.migrated', false);
     }
 }

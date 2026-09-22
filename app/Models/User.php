@@ -94,6 +94,19 @@ class User extends Authenticatable implements PasskeyUser
         return $this->tenant_id === null && $this->hasRole('super_admin');
     }
 
+    /**
+     * Platform console operator (super admin or other platform-scoped admin roles).
+     */
+    public function isPlatformAdmin(): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        return $this->tenant_id === null
+            && $this->roles()->whereNull('roles.tenant_id')->exists();
+    }
+
     public function hasRole(string $slug): bool
     {
         if ($this->relationLoaded('roles')) {
@@ -129,6 +142,57 @@ class User extends Authenticatable implements PasskeyUser
 
     public function hasLinkedPatient(): bool
     {
-        return Patient::query()->where('user_id', $this->id)->exists();
+        return Patient::query()
+            ->withoutGlobalScopes()
+            ->where('user_id', $this->id)
+            ->when(
+                $this->tenant_id !== null,
+                fn ($query) => $query->where('tenant_id', $this->tenant_id),
+            )
+            ->exists();
+    }
+
+    public function hasLinkedProvider(): bool
+    {
+        return Provider::query()
+            ->withoutGlobalScopes()
+            ->where('user_id', $this->id)
+            ->when(
+                $this->tenant_id !== null,
+                fn ($query) => $query->where('tenant_id', $this->tenant_id),
+            )
+            ->exists();
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function linkedProviderIds(): array
+    {
+        return Provider::query()
+            ->withoutGlobalScopes()
+            ->where('user_id', $this->id)
+            ->when(
+                $this->tenant_id !== null,
+                fn ($query) => $query->where('tenant_id', $this->tenant_id),
+            )
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Clinic admins / org staff see the full day board; doctors only their panels.
+     */
+    public function canViewClinicAppointmentBoard(): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        return $this->hasRole('clinic_admin')
+            || $this->hasRole('organization_admin')
+            || $this->hasRole('branch_manager')
+            || $this->hasPermission('patients.manage');
     }
 }

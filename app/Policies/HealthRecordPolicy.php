@@ -43,6 +43,10 @@ class HealthRecordPolicy
             return true;
         }
 
+        if ($user->ownsPatient($patient)) {
+            return true;
+        }
+
         return $user->tenant_id === $patient->tenant_id
             && $user->hasPermission('patients.records.manage');
     }
@@ -53,6 +57,11 @@ class HealthRecordPolicy
             return true;
         }
 
+        $patient = $record->patient;
+        if ($patient && $user->ownsPatient($patient)) {
+            return true;
+        }
+
         return $user->tenant_id === $record->tenant_id
             && $user->hasPermission('patients.records.manage');
     }
@@ -60,6 +69,11 @@ class HealthRecordPolicy
     public function delete(User $user, HealthRecord $record): bool
     {
         if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        $patient = $record->patient;
+        if ($patient && $user->ownsPatient($patient)) {
             return true;
         }
 

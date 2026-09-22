@@ -22,8 +22,10 @@ class TenantController extends Controller
     {
         $this->authorize('viewAny', Tenant::class);
 
+        $perPage = min(500, max(1, (int) request()->integer('per_page', 100)));
+
         return TenantResource::collection(
-            Tenant::query()->latest()->paginate()
+            Tenant::query()->latest()->paginate($perPage)
         );
     }
 

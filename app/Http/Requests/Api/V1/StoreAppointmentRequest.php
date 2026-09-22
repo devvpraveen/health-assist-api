@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Api\V1;
 
 use App\Models\Appointment;
+use App\Models\Patient;
+use App\Models\Provider;
 use App\Support\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -12,6 +14,37 @@ class StoreAppointmentRequest extends FormRequest
     public function authorize(): bool
     {
         return $this->user()?->can('create', Appointment::class) ?? false;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $user = $this->user();
+        if ($user === null) {
+            return;
+        }
+
+        $canManage = $user->isSuperAdmin() || $user->hasPermission('appointments.manage');
+
+        // Patients can only book for their linked chart.
+        if (! $canManage) {
+            $patientId = Patient::query()->where('user_id', $user->id)->value('id');
+            if ($patientId) {
+                $this->merge(['patient_id' => $patientId]);
+            }
+        }
+
+        if ($this->filled('provider_uuid') && ! $this->filled('provider_id')) {
+            $provider = Provider::query()
+                ->where('uuid', $this->string('provider_uuid')->toString())
+                ->first();
+
+            if ($provider) {
+                $this->merge([
+                    'provider_id' => $provider->id,
+                    'clinic_id' => $this->input('clinic_id') ?? $provider->clinic_id,
+                ]);
+            }
+        }
     }
 
     /**
@@ -28,9 +61,14 @@ class StoreAppointmentRequest extends FormRequest
                 Rule::exists('patients', 'id')->where('tenant_id', $tenantId),
             ],
             'provider_id' => [
-                'required',
+                'required_without:provider_uuid',
                 'integer',
                 Rule::exists('providers', 'id')->where('tenant_id', $tenantId),
+            ],
+            'provider_uuid' => [
+                'required_without:provider_id',
+                'uuid',
+                Rule::exists('providers', 'uuid')->where('tenant_id', $tenantId),
             ],
             'clinic_id' => [
                 'nullable',

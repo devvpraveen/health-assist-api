@@ -23,8 +23,16 @@ class PlatformUserController extends Controller
         $this->authorizeManage($request->user());
 
         $query = User::query()
-            ->with(['roles', 'tenant'])
+            ->with(['roles.permissions', 'tenant'])
             ->latest('id');
+
+        $audience = $request->string('audience')->toString();
+        if ($audience === 'admin') {
+            // Platform console operators (no tenant scope).
+            $query->whereNull('tenant_id');
+        } elseif ($audience === 'public') {
+            $query->whereNotNull('tenant_id');
+        }
 
         if ($search = $request->string('q')->toString()) {
             $query->where(function ($builder) use ($search): void {
@@ -60,6 +68,7 @@ class PlatformUserController extends Controller
                 Rule::exists('roles', 'slug')->where(fn ($q) => $q->whereNull('tenant_id')),
             ],
             'tenant_uuid' => ['nullable', 'uuid', 'exists:tenants,uuid'],
+            'platform' => ['sometimes', 'boolean'],
         ]);
 
         $role = Role::query()
@@ -67,18 +76,22 @@ class PlatformUserController extends Controller
             ->where('slug', $validated['role_slug'])
             ->firstOrFail();
 
+        $isPlatformOperator = $request->boolean('platform')
+            || $role->slug === 'super_admin'
+            || str_starts_with($role->slug, 'platform_');
+
         $tenant = null;
         if (! empty($validated['tenant_uuid'])) {
             $tenant = Tenant::query()->where('uuid', $validated['tenant_uuid'])->firstOrFail();
         }
 
-        if ($role->slug === 'super_admin' && $tenant !== null) {
+        if ($isPlatformOperator && $tenant !== null) {
             throw ValidationException::withMessages([
-                'tenant_uuid' => ['Super admins must not be scoped to a tenant.'],
+                'tenant_uuid' => ['Platform admin users must not be scoped to a tenant.'],
             ]);
         }
 
-        if ($role->slug !== 'super_admin' && $tenant === null) {
+        if (! $isPlatformOperator && $tenant === null) {
             throw ValidationException::withMessages([
                 'tenant_uuid' => ['Select a tenant for this role.'],
             ]);
@@ -100,7 +113,7 @@ class PlatformUserController extends Controller
             'password' => $validated['password'],
             'phone' => $validated['phone'] ?? null,
             'status' => $validated['status'] ?? 'active',
-            'tenant_id' => $role->slug === 'super_admin' ? null : $tenant?->id,
+            'tenant_id' => $isPlatformOperator ? null : $tenant?->id,
         ]);
         $user->forceFill(['email_verified_at' => now()])->save();
 
@@ -109,9 +122,10 @@ class PlatformUserController extends Controller
         $auditLogger->log('users.created', $user, [
             'user_uuid' => $user->uuid,
             'role_slug' => $role->slug,
+            'platform' => $isPlatformOperator,
         ]);
 
-        return (new UserResource($user->load(['roles', 'tenant'])))
+        return (new UserResource($user->load(['roles.permissions', 'tenant'])))
             ->response()
             ->setStatusCode(201);
     }
@@ -148,6 +162,15 @@ class PlatformUserController extends Controller
 
         if ($roleSlug) {
             $role = Role::query()->whereNull('tenant_id')->where('slug', $roleSlug)->firstOrFail();
+            $isPlatformOperator = $user->tenant_id === null
+                || $role->slug === 'super_admin'
+                || str_starts_with($role->slug, 'platform_');
+
+            if ($isPlatformOperator) {
+                $user->tenant_id = null;
+                $user->save();
+            }
+
             $pivotTenantId = $user->tenant_id
                 ?? Tenant::query()->where('slug', 'healthassist-platform')->value('id')
                 ?? Tenant::query()->orderBy('id')->value('id');
@@ -167,7 +190,7 @@ class PlatformUserController extends Controller
             'fields' => array_keys($validated),
         ]);
 
-        return new UserResource($user->fresh()->load(['roles', 'tenant']));
+        return new UserResource($user->fresh()->load(['roles.permissions', 'tenant']));
     }
 
     public function destroy(Request $request, User $user, AuditLogger $auditLogger): Response

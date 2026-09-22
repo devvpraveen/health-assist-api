@@ -17,6 +17,9 @@ use Illuminate\Support\Str;
  * @property string|null $description
  * @property int $sort_order
  * @property bool $is_active
+ * @property int $price_cents
+ * @property string $currency
+ * @property int|null $validity_days
  * @property array<string, mixed>|null $metadata
  */
 #[Fillable([
@@ -27,6 +30,9 @@ use Illuminate\Support\Str;
     'description',
     'sort_order',
     'is_active',
+    'price_cents',
+    'currency',
+    'validity_days',
     'metadata',
 ])]
 class Package extends Model
@@ -34,6 +40,8 @@ class Package extends Model
     protected $attributes = [
         'sort_order' => 0,
         'is_active' => true,
+        'price_cents' => 0,
+        'currency' => 'INR',
     ];
 
     protected static function booted(): void
@@ -56,6 +64,8 @@ class Package extends Model
         return [
             'is_active' => 'boolean',
             'metadata' => 'array',
+            'price_cents' => 'integer',
+            'validity_days' => 'integer',
         ];
     }
 

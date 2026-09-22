@@ -23,7 +23,7 @@ class ClinicController extends Controller
     {
         $this->authorize('viewAny', Clinic::class);
 
-        $query = Clinic::query()->latest();
+        $query = Clinic::query()->with('tenant')->latest();
 
         if ($search = $request->string('q')->toString()) {
             $query->where(function ($builder) use ($search): void {

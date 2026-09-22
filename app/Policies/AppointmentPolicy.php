@@ -9,7 +9,9 @@ class AppointmentPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->isSuperAdmin() || $user->hasPermission('appointments.view');
+        return $user->isSuperAdmin()
+            || $user->hasPermission('appointments.view')
+            || $user->hasLinkedPatient();
     }
 
     public function view(User $user, Appointment $appointment): bool
@@ -18,13 +20,29 @@ class AppointmentPolicy
             return true;
         }
 
-        return $user->tenant_id === $appointment->tenant_id
+        $appointment->loadMissing('patient');
+        if ($appointment->patient && $user->ownsPatient($appointment->patient)) {
+            return true;
+        }
+
+        if ($user->tenant_id !== $appointment->tenant_id) {
+            return false;
+        }
+
+        if ($user->canViewClinicAppointmentBoard()) {
+            return $user->hasPermission('appointments.view');
+        }
+
+        // Doctors: only appointments on their linked provider profile(s).
+        return in_array((int) $appointment->provider_id, $user->linkedProviderIds(), true)
             && $user->hasPermission('appointments.view');
     }
 
     public function create(User $user): bool
     {
-        return $user->isSuperAdmin() || $user->hasPermission('appointments.manage');
+        return $user->isSuperAdmin()
+            || $user->hasPermission('appointments.manage')
+            || $user->hasLinkedPatient();
     }
 
     public function update(User $user, Appointment $appointment): bool
@@ -33,7 +51,15 @@ class AppointmentPolicy
             return true;
         }
 
-        return $user->tenant_id === $appointment->tenant_id
+        if ($user->tenant_id !== $appointment->tenant_id) {
+            return false;
+        }
+
+        if ($user->canViewClinicAppointmentBoard()) {
+            return $user->hasPermission('appointments.manage');
+        }
+
+        return in_array((int) $appointment->provider_id, $user->linkedProviderIds(), true)
             && $user->hasPermission('appointments.manage');
     }
 
@@ -53,9 +79,22 @@ class AppointmentPolicy
             return true;
         }
 
-        return $user->tenant_id === $appointment->tenant_id
-            && ($user->hasPermission('appointments.queue.manage')
-                || $user->hasPermission('appointments.manage'));
+        if ($user->tenant_id !== $appointment->tenant_id) {
+            return false;
+        }
+
+        $canQueue = $user->hasPermission('appointments.queue.manage')
+            || $user->hasPermission('appointments.manage');
+
+        if (! $canQueue) {
+            return false;
+        }
+
+        if ($user->canViewClinicAppointmentBoard()) {
+            return true;
+        }
+
+        return in_array((int) $appointment->provider_id, $user->linkedProviderIds(), true);
     }
 
     public function updateStatus(User $user, Appointment $appointment): bool

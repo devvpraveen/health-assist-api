@@ -115,9 +115,9 @@ class DemoTenantSeeder extends Seeder
                 'supported_locales' => ['en', 'hi'],
                 'meta' => [
                     'profile' => [
-                        'tagline' => 'Health Assist Demo Clinic · Bengaluru',
-                        'hero_headline' => "Your family's partner in better health",
-                        'hero_subheadline' => 'Expert care for diabetes, hypertension, musculoskeletal pain, and general medicine — with online booking and shorter waiting times.',
+                        'tagline' => 'Modern care · Traditional trust',
+                        'hero_headline' => "Your family's trusted partner in modern healthcare.",
+                        'hero_subheadline' => 'Physician-led care for diabetes, hypertension, musculoskeletal pain, and general medicine — with online booking, shorter waits, and clear visit prep.',
                         'about' => "Welcome to Health Assist Demo Clinic. We combine physician-led clinical care with modern physiotherapy and digital follow-up so patients spend less time waiting and more time recovering.\n\nThis demo profile mirrors a real clinic marketing site: editable from the clinic staff panel and the platform super-admin console.",
                         'booking_benefits' => [
                             'Priority consultation over walk-in patients',
@@ -126,24 +126,62 @@ class DemoTenantSeeder extends Seeder
                             'Clear follow-up reminders after visits',
                         ],
                         'highlights' => [
-                            ['label' => 'Years', 'value' => '12+'],
-                            ['label' => 'Patients', 'value' => '25K+'],
-                            ['label' => 'Satisfaction', 'value' => '98%'],
+                            ['label' => 'Years clinic experience', 'value' => '12+'],
+                            ['label' => 'Patients served', 'value' => '25,000+'],
+                            ['label' => 'Patient feedback', 'value' => '98.4%'],
+                            ['label' => 'Avg. wait time', 'value' => '< 10 min'],
+                        ],
+                        'features' => [
+                            [
+                                'title' => 'Guided consults',
+                                'description' => 'Clear visit prep and clinician-led advice for everyday health questions.',
+                            ],
+                            [
+                                'title' => 'Integrated diagnostics',
+                                'description' => 'Coordinate tests and follow-ups from one clinic workflow.',
+                            ],
+                            [
+                                'title' => 'Digital health records',
+                                'description' => 'Keep reports and visit notes easier to find between appointments.',
+                            ],
+                            [
+                                'title' => 'Calm check-in',
+                                'description' => 'Reserved slots and assistive reminders to reduce waiting stress.',
+                            ],
+                        ],
+                        'booking_steps' => [
+                            [
+                                'title' => 'Select center & time',
+                                'description' => 'Choose a specialty or clinician and pick a reserved slot that fits your day.',
+                            ],
+                            [
+                                'title' => 'Update your profile',
+                                'description' => 'Share basic patient details so check-in is faster when you arrive.',
+                            ],
+                            [
+                                'title' => 'Confirm & walk in ready',
+                                'description' => 'Get confirmation details and arrive with your visit queue already set.',
+                            ],
                         ],
                         'testimonials' => [
                             [
                                 'quote' => 'Booking online was quick and easy. Staff were professional and the wait was short.',
                                 'author' => 'Ravi K.',
-                                'role' => 'Verified patient',
+                                'role' => 'Bengaluru',
                             ],
                             [
                                 'quote' => 'The slot system reduced waiting time significantly. The clinician explained everything clearly.',
                                 'author' => 'Anita S.',
-                                'role' => 'Verified patient',
+                                'role' => 'Bengaluru',
+                            ],
+                            [
+                                'quote' => 'Follow-up reminders helped me stay on track after physiotherapy. The process felt calm and organized.',
+                                'author' => 'Meera P.',
+                                'role' => 'Bengaluru',
                             ],
                         ],
-                        'cta_label' => 'Book appointment',
-                        'cta_href' => '/app/book',
+                        'cta_label' => 'Book Appointment',
+                        'cta_href' => '/login?next=/app/appointments/book',
                         'seo_title' => 'Health Assist Demo Clinic | Bengaluru',
                         'seo_description' => 'Book physician-led care in Bengaluru. Physiotherapy, orthopedics, and general medicine with online appointments.',
                     ],
@@ -190,10 +228,48 @@ class DemoTenantSeeder extends Seeder
         $physio = $specialties->get('physiotherapy');
 
         $services = [
-            ['slug' => 'physio-consult', 'name' => 'Physiotherapy Consultation', 'price_cents' => 150000, 'specialty' => 'physiotherapy'],
-            ['slug' => 'physio-session', 'name' => 'Physiotherapy Session', 'price_cents' => 120000, 'specialty' => 'physiotherapy'],
-            ['slug' => 'ortho-consult', 'name' => 'Orthopedics Consultation', 'price_cents' => 200000, 'specialty' => 'orthopedics'],
-            ['slug' => 'wellness-check', 'name' => 'Wellness Check-in', 'price_cents' => 80000, 'specialty' => 'wellness'],
+            [
+                'slug' => 'physio-consult',
+                'name' => 'Physiotherapy Initial Consultation',
+                'price_cents' => 150000,
+                'specialty' => 'physiotherapy',
+                'description' => 'Assessment-led physiotherapy consult for back, knee, and mobility concerns with a clear home plan.',
+            ],
+            [
+                'slug' => 'physio-session',
+                'name' => 'Advanced Physiotherapy Session',
+                'price_cents' => 120000,
+                'specialty' => 'physiotherapy',
+                'description' => 'Hands-on therapy session focused on recovery progress, mobility, and ergonomic guidance.',
+            ],
+            [
+                'slug' => 'ortho-consult',
+                'name' => 'Orthopedics Consultation',
+                'price_cents' => 200000,
+                'specialty' => 'orthopedics',
+                'description' => 'Physician review for joint pain, sports injuries, and musculoskeletal concerns with next-step planning.',
+            ],
+            [
+                'slug' => 'wellness-check',
+                'name' => 'Wellness Check-in',
+                'price_cents' => 80000,
+                'specialty' => 'wellness',
+                'description' => 'Preventive wellness visit covering lifestyle, vitals review, and practical follow-up recommendations.',
+            ],
+            [
+                'slug' => 'diabetes-check',
+                'name' => 'Diabetes Check-up',
+                'price_cents' => 99900,
+                'specialty' => 'general_medicine',
+                'description' => 'Focused diabetes review with medication discussion, lifestyle guidance, and monitoring tips.',
+            ],
+            [
+                'slug' => 'general-consult',
+                'name' => 'General Medicine Consultation',
+                'price_cents' => 90000,
+                'specialty' => 'general_medicine',
+                'description' => 'Primary care consult for fever, infections, hypertension follow-up, and everyday health concerns.',
+            ],
         ];
 
         $serviceModels = [];
@@ -205,7 +281,7 @@ class DemoTenantSeeder extends Seeder
                     'uuid' => (string) Str::uuid(),
                     'specialty_id' => $specialtyId,
                     'name' => $svc['name'],
-                    'description' => $svc['name'].' (demo)',
+                    'description' => $svc['description'],
                     'duration_minutes' => 30,
                     'price_cents' => $svc['price_cents'],
                     'currency' => 'INR',

@@ -4,8 +4,10 @@ use App\Http\Controllers\Api\V1\Admin\AuditLogController as AdminAuditLogControl
 use App\Http\Controllers\Api\V1\Admin\LanguageController as AdminLanguageController;
 use App\Http\Controllers\Api\V1\Admin\PlatformIntegrationController as AdminPlatformIntegrationController;
 use App\Http\Controllers\Api\V1\Admin\PlatformSettingController as AdminPlatformSettingController;
+use App\Http\Controllers\Api\V1\Admin\PlatformRoleController as AdminPlatformRoleController;
 use App\Http\Controllers\Api\V1\Admin\PlatformUserController as AdminPlatformUserController;
 use App\Http\Controllers\Api\V1\Admin\SecurityConsoleController as AdminSecurityConsoleController;
+use App\Http\Controllers\Api\V1\Admin\UiTranslationController as AdminUiTranslationController;
 use App\Http\Controllers\Api\V1\Ai\AiController;
 use App\Http\Controllers\Api\V1\Ai\AiLearningController;
 use App\Http\Controllers\Api\V1\Ai\AiModelManageController;
@@ -15,6 +17,7 @@ use App\Http\Controllers\Api\V1\AppointmentController;
 use App\Http\Controllers\Api\V1\AttributionController;
 use App\Http\Controllers\Api\V1\AudienceSegmentController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\Automation\AutomationWorkflowController;
 use App\Http\Controllers\Api\V1\AvailabilityController;
 use App\Http\Controllers\Api\V1\BillingPackageController;
 use App\Http\Controllers\Api\V1\BillingTaxRateController;
@@ -31,6 +34,7 @@ use App\Http\Controllers\Api\V1\ClinicController;
 use App\Http\Controllers\Api\V1\EmailMarketingController;
 use App\Http\Controllers\Api\V1\ExerciseController;
 use App\Http\Controllers\Api\V1\ExperimentController;
+use App\Http\Controllers\Api\V1\Forms\FormDefinitionController;
 use App\Http\Controllers\Api\V1\HealthGuideController;
 use App\Http\Controllers\Api\V1\HealthRecordController;
 use App\Http\Controllers\Api\V1\InvoiceController;
@@ -59,6 +63,12 @@ use App\Http\Controllers\Api\V1\PublicHealthGuideController;
 use App\Http\Controllers\Api\V1\PublicMobileAppLinksController;
 use App\Http\Controllers\Api\V1\PublicOrganizationController;
 use App\Http\Controllers\Api\V1\PublicProviderController;
+use App\Http\Controllers\Api\V1\ClinicNoticeController;
+use App\Http\Controllers\Api\V1\OrganizationReviewController;
+use App\Http\Controllers\Api\V1\StaffInviteController;
+use App\Http\Controllers\Api\V1\TenantSetupController;
+use App\Http\Controllers\Api\V1\WorkingHourController;
+use App\Http\Controllers\Api\V1\AiReceptionistController;
 use App\Http\Controllers\Api\V1\PublicSeoEntityController;
 use App\Http\Controllers\Api\V1\PublicSeoFaqController;
 use App\Http\Controllers\Api\V1\PublicShareMetaController;
@@ -74,9 +84,11 @@ use App\Http\Controllers\Api\V1\SeoEntityController;
 use App\Http\Controllers\Api\V1\SeoFaqController;
 use App\Http\Controllers\Api\V1\ServiceController;
 use App\Http\Controllers\Api\V1\SpecialtyController;
+use App\Http\Controllers\Api\V1\Templates\TemplateController;
 use App\Http\Controllers\Api\V1\TenantAiModelSettingsController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\TenantLanguageSettingsController;
+use App\Http\Controllers\Api\V1\UiTranslationController;
 use App\Http\Controllers\Api\V1\WaitlistController;
 use App\Http\Controllers\Api\V1\WellnessCategoryController;
 use App\Http\Controllers\Api\V1\WellnessContentController;
@@ -85,9 +97,6 @@ use App\Http\Controllers\Api\V1\WhatsApp\EvolutionWebhookController;
 use App\Http\Controllers\Api\V1\WhatsApp\WhatsAppAccountController;
 use App\Http\Controllers\Api\V1\WhatsApp\WhatsAppConversationController;
 use App\Http\Controllers\Api\V1\WhatsApp\WhatsAppHandoffController;
-use App\Http\Controllers\Api\V1\Forms\FormDefinitionController;
-use App\Http\Controllers\Api\V1\Templates\TemplateController;
-use App\Http\Controllers\Api\V1\Automation\AutomationWorkflowController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -102,9 +111,11 @@ Route::prefix('v1')->group(function (): void {
         Route::post('auth/otp/email/request', [ProgressiveAuthController::class, 'requestEmailOtp']);
         Route::post('auth/otp/email/verify', [ProgressiveAuthController::class, 'verifyEmailOtp']);
         Route::post('auth/google', [ProgressiveAuthController::class, 'google']);
+        Route::post('auth/firebase', [ProgressiveAuthController::class, 'firebase']);
     });
 
     Route::get('languages', [LanguageController::class, 'index'])->middleware('throttle:60,1');
+    Route::get('translations', [UiTranslationController::class, 'index'])->middleware('throttle:60,1');
 
     // Evolution API inbound webhook (no Sanctum; verified via account webhook_secret).
     Route::post('webhooks/evolution/{accountUuid}', EvolutionWebhookController::class)
@@ -113,6 +124,8 @@ Route::prefix('v1')->group(function (): void {
     Route::prefix('public')->middleware('throttle:60,1')->group(function (): void {
         Route::get('clinics', [PublicClinicController::class, 'index']);
         Route::get('clinics/{uuidOrSlug}', [PublicClinicController::class, 'show']);
+        Route::get('provider/{uuidOrSlug}', [PublicClinicController::class, 'show']);
+        Route::post('provider/{uuidOrSlug}/reviews', [OrganizationReviewController::class, 'storePublic']);
         Route::get('organizations', [PublicOrganizationController::class, 'index']);
         Route::get('organizations/{uuidOrSlug}', [PublicOrganizationController::class, 'show']);
         Route::get('providers', [PublicProviderController::class, 'index']);
@@ -125,6 +138,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('wellness/contents', [PublicWellnessContentController::class, 'index']);
         Route::get('wellness/contents/{slug}', [PublicWellnessContentController::class, 'show']);
         Route::get('packages', [ModulePlatformController::class, 'publicPackages']);
+        Route::get('modules', [ModulePlatformController::class, 'publicModules']);
 
         Route::post('analytics/events', [AnalyticsEventController::class, 'storePublic'])
             ->middleware('throttle:120,1');
@@ -156,6 +170,7 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware(['auth:sanctum', 'tenant'])->group(function (): void {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('auth/me', [AuthController::class, 'me']);
+        Route::post('auth/persona', [AuthController::class, 'choosePersona']);
         Route::post('auth/guest/claim', [ProgressiveAuthController::class, 'claimGuest']);
 
         Route::post('tenants/provision', [TenantController::class, 'provision']);
@@ -170,12 +185,36 @@ Route::prefix('v1')->group(function (): void {
         Route::put('tenant/ai-model-settings', [TenantAiModelSettingsController::class, 'update']);
 
         Route::get('modules', [ModulePlatformController::class, 'catalog']);
+        Route::patch('modules/{moduleKey}', [ModulePlatformController::class, 'updateModule']);
         Route::get('packages', [ModulePlatformController::class, 'packages']);
+        Route::post('packages', [ModulePlatformController::class, 'storePackage']);
+        Route::patch('packages/{package}', [ModulePlatformController::class, 'updatePackage']);
         Route::get('tenants/current/modules', [ModulePlatformController::class, 'tenantModules']);
         Route::post('tenants/current/modules/{moduleKey}/activate', [ModulePlatformController::class, 'activate']);
         Route::post('tenants/current/modules/{moduleKey}/deactivate', [ModulePlatformController::class, 'deactivate']);
+        Route::post('tenants/current/modules/purchase', [ModulePlatformController::class, 'purchaseModules']);
         Route::get('tenants/current/entitlements', [ModulePlatformController::class, 'entitlements']);
         Route::post('tenants/current/subscription', [ModulePlatformController::class, 'assignSubscription']);
+        Route::get('tenants/current/setup-status', [TenantSetupController::class, 'show']);
+        Route::post('tenants/current/setup-status/dismiss-getting-started', [TenantSetupController::class, 'dismissGettingStarted']);
+
+        Route::get('working-hours', [WorkingHourController::class, 'index']);
+        Route::put('working-hours', [WorkingHourController::class, 'sync']);
+        Route::post('working-hours/exceptions', [WorkingHourController::class, 'storeException']);
+
+        Route::get('clinic-notices', [ClinicNoticeController::class, 'index']);
+        Route::post('clinic-notices', [ClinicNoticeController::class, 'store']);
+        Route::patch('clinic-notices/{notice}', [ClinicNoticeController::class, 'update']);
+        Route::delete('clinic-notices/{notice}', [ClinicNoticeController::class, 'destroy']);
+
+        Route::get('staff/invites', [StaffInviteController::class, 'index']);
+        Route::post('staff/invites', [StaffInviteController::class, 'store']);
+        Route::delete('staff/invites/{invite}', [StaffInviteController::class, 'destroy']);
+
+        Route::get('organization-reviews', [OrganizationReviewController::class, 'index']);
+        Route::patch('organization-reviews/{review}', [OrganizationReviewController::class, 'update']);
+
+        Route::post('ai/receptionist', [AiReceptionistController::class, 'chat']);
 
         Route::get('templates', [TemplateController::class, 'index']);
         Route::post('templates', [TemplateController::class, 'store']);
@@ -206,10 +245,20 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('languages/{language}', [AdminLanguageController::class, 'update']);
             Route::put('languages/{language}/scopes', [AdminLanguageController::class, 'updateScopes']);
 
+            Route::get('translations', [AdminUiTranslationController::class, 'index']);
+            Route::post('translations', [AdminUiTranslationController::class, 'upsert']);
+            Route::delete('translations/{translation}', [AdminUiTranslationController::class, 'destroy']);
+
             Route::get('users', [AdminPlatformUserController::class, 'index']);
             Route::post('users', [AdminPlatformUserController::class, 'store']);
             Route::patch('users/{user}', [AdminPlatformUserController::class, 'update']);
             Route::delete('users/{user}', [AdminPlatformUserController::class, 'destroy']);
+
+            Route::get('permissions', [AdminPlatformRoleController::class, 'permissions']);
+            Route::get('roles', [AdminPlatformRoleController::class, 'index']);
+            Route::post('roles', [AdminPlatformRoleController::class, 'store']);
+            Route::patch('roles/{role}', [AdminPlatformRoleController::class, 'update']);
+            Route::delete('roles/{role}', [AdminPlatformRoleController::class, 'destroy']);
 
             Route::get('audit-logs', [AdminAuditLogController::class, 'index']);
 

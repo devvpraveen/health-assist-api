@@ -19,6 +19,12 @@ class AssignPackageToTenantAction
     public function handle(Tenant $tenant, Package $package, bool $activateIncluded = true): TenantSubscription
     {
         return DB::transaction(function () use ($tenant, $package, $activateIncluded): TenantSubscription {
+            $validityDays = $package->validity_days;
+            $startsAt = now();
+            $renewsAt = $validityDays !== null
+                ? $startsAt->copy()->addDays((int) $validityDays)
+                : $startsAt->copy()->addMonth();
+
             $subscription = TenantSubscription::query()->withoutGlobalScopes()->updateOrCreate(
                 [
                     'tenant_id' => $tenant->id,
@@ -26,8 +32,15 @@ class AssignPackageToTenantAction
                 ],
                 [
                     'package_id' => $package->id,
-                    'starts_at' => now(),
-                    'renews_at' => now()->addMonth(),
+                    'starts_at' => $startsAt,
+                    'ends_at' => $validityDays !== null ? $renewsAt : null,
+                    'renews_at' => $renewsAt,
+                    'meta' => array_merge($package->metadata ?? [], [
+                        'price_cents' => (int) $package->price_cents,
+                        'currency' => $package->currency ?: 'INR',
+                        'validity_days' => $validityDays,
+                        'payment_status' => 'recorded',
+                    ]),
                 ],
             );
 

@@ -14,6 +14,10 @@ class PatientDocumentPolicy
             return true;
         }
 
+        if ($user->ownsPatient($patient)) {
+            return true;
+        }
+
         return $user->tenant_id === $patient->tenant_id
             && $user->hasPermission('patients.documents.view');
     }
@@ -24,6 +28,11 @@ class PatientDocumentPolicy
             return true;
         }
 
+        $patient = $document->patient;
+        if ($patient && $user->ownsPatient($patient)) {
+            return true;
+        }
+
         return $user->tenant_id === $document->tenant_id
             && $user->hasPermission('patients.documents.view');
     }
@@ -31,6 +40,10 @@ class PatientDocumentPolicy
     public function create(User $user, Patient $patient): bool
     {
         if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        if ($user->ownsPatient($patient)) {
             return true;
         }
 
@@ -46,6 +59,11 @@ class PatientDocumentPolicy
     public function delete(User $user, PatientDocument $document): bool
     {
         if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        $patient = $document->patient;
+        if ($patient && $user->ownsPatient($patient)) {
             return true;
         }
 
