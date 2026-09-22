@@ -1,0 +1,17 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond  %{REQUEST_URI}  !^/mm.*$
+#     RewriteRule ^(.*)$ public/$1 [L,QSA]
+
+#     RewriteCond  %{REQUEST_URI}  ^/mm.*$
+#     RewriteRule ^/mm/(.*)$ public/mm/$1 [L,QSA]
+# </IfModule>
+# AddDefaultCharset utf-8
+Options +Indexes
+IndexOptions -FancyIndexing
